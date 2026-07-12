@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../screens/splash/splash_screen.dart';
 import '../screens/home/home_screen.dart';
-import '../screens/order/order_screen.dart';
 
 /// Every route name lives here. Add one line here + one in [appRoutes
 /// whenever a new screen is ready to be linked in.
@@ -11,7 +10,6 @@ class AppRoutes {
 
   static const String splash = '/';
   static const String home = '/home';
-  static const String order = '/order';
 }
 
 /// Maps each route name to the screen that should be shown.
@@ -19,5 +17,4 @@ class AppRoutes {
 final Map<String, WidgetBuilder> appRoutes = {
   AppRoutes.splash: (context) => const SplashScreen(),
   AppRoutes.home: (context) => const HomeScreen(),
-  AppRoutes.order: (context) => const OrderScreen(),
 };
