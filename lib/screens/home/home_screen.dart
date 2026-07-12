@@ -162,7 +162,20 @@ class HomeScreen extends StatelessWidget {
                                     ),
                                   ),
                                   ElevatedButton(
-                                    onPressed: () {},
+                                    onPressed: () {
+                                            Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) => OrderScreen(
+                                                          product: Product(
+                                                            title: item['title']!,
+                                                            price: int.parse(item['price']!.replaceAll(RegExp(r'[^0-9]'), '')),
+                                                            imageUrl: item['image']!,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                    },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.orange[700],
                                       foregroundColor: Colors.white,

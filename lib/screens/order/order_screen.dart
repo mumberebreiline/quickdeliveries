@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../models/product.dart';
 
 class OrderScreen extends StatefulWidget {
   // This is how the screen "receives the selected product" (Step 1 in
