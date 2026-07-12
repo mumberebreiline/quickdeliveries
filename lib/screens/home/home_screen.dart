@@ -1,34 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:quickdeliveries/models/product.dart';
+import 'package:quickdeliveries/screens/order/order_screen.dart'; 
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  // Sample data based on your menu image
-  final List<Map<String, String>> menuItems = const [
-    {
-      'title': 'matooke with meat',
-      'description': 'Meat stew and whole banana.',
-      'price': 'UGX 8,000',
-      'image': 'assets/images/IMG-whole-matooke-with-meat.jpg', // Replace with your asset image path
-    },
-    {
-      'title': 'Matooke & Groundnut Sauce',
-      'description': 'Steamed matooke with peanut sauce.',
-      'price': 'UGX 5,000',
-      'image': 'assets/images/IMG-20260710-WA0023.jpg',
-    },
-    {
-      'title': 'Matooke and Irish with Chicken',
-      'description': 'Irish potatoes and Matooke served with chicken',
-      'price': 'UGX 12,000',
-      'image': 'assets/images/IMG-matookeandirish-with-chicken.jpg',
-    },
-    {
-      'title': 'Rolex',
-      'description': 'Fried chappati containing fried egg rollrd with tomatoes and slices of avocado.',
-      'price': 'UGX 7,000',
-      'image': 'assets/images/IMG-rolex.jpg',
-    },
+  // Strongly typed using your Product class instead of raw Map
+  final List<Product> menuItems = const [
+    Product(
+      title: 'Matooke with meat',
+      price: 8000,
+      imageUrl: 'assets/images/IMG-whole-matooke-with-meat.jpg',
+    ),
+    Product(
+      title: 'Matooke & Groundnut Sauce',
+      price: 5000,
+      imageUrl: 'assets/images/IMG-20260710-WA0023.jpg',
+    ),
+    Product(
+      title: 'Matooke and Irish with Chicken',
+      price: 12000,
+      imageUrl: 'assets/images/IMG-matookeandirish-with-chicken.jpg',
+    ),
+    Product(
+      title: 'Rolex',
+      price: 7000,
+      imageUrl: 'assets/images/IMG-rolex.jpg',
+    ),
   ];
 
   @override
@@ -96,7 +94,7 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: menuItems.length,
               itemBuilder: (context, index) {
-                final item = menuItems[index];
+                final product = menuItems[index];
                 return Container(
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
@@ -115,14 +113,21 @@ class HomeScreen extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Food Image Clip
+                        // Food Image Clip (Fixed: Changed from Image.network to Image.asset)
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            item['image']!,
+                          child: Image.asset(
+                            product.imageUrl,
                             width: 90,
                             height: 90,
                             fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                              width: 90,
+                              height: 90,
+                              color: Colors.grey[200],
+                              child: const Icon(Icons.fastfood, color: Colors.grey),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -132,21 +137,11 @@ class HomeScreen extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                item['title']!,
+                                product.title,
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                item['description']!,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 12),
                               // Price and Order Button Row
@@ -154,7 +149,7 @@ class HomeScreen extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    item['price']!,
+                                    'UGX ${product.price}',
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w900,
@@ -162,7 +157,16 @@ class HomeScreen extends StatelessWidget {
                                     ),
                                   ),
                                   ElevatedButton(
-                                    onPressed: () {},
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => OrderScreen(
+                                            product: product,
+                                          ),
+                                        ),
+                                      );
+                                    },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.orange[700],
                                       foregroundColor: Colors.white,
@@ -202,4 +206,3 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-
