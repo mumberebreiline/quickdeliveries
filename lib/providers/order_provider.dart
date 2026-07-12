@@ -7,7 +7,6 @@ import '../models/order_item.dart';
 import '../models/product.dart';
 import '../services/order_service.dart';
 import '../services/route_optimizer_service.dart';
-import '../models/product.dart'; // Adjust this path to match where your real product model is located
 
 /// One line in the customer's in-progress cart, before it becomes an order.
 class CartLine {
