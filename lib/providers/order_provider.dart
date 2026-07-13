@@ -129,11 +129,27 @@ class OrderProvider extends ChangeNotifier {
   List<FoodOrder> _activeOrders = [];
   List<FoodOrder> get activeOrders => _activeOrders;
 
+  /// Set if the live orders feed fails — most commonly because Firestore
+  /// needs a composite index for this query (status + preferredTime) and
+  /// it hasn't been created yet. Previously this error was swallowed
+  /// silently, which looked exactly like "no orders ever arrive."
+  String? _activeOrdersError;
+  String? get activeOrdersError => _activeOrdersError;
+
   void _listenToActiveOrders() {
-    _activeOrdersSub = _orderService.streamActiveOrders().listen((orders) {
-      _activeOrders = orders;
-      notifyListeners();
-    });
+    _activeOrdersSub = _orderService.streamActiveOrders().listen(
+      (orders) {
+        _activeOrders = orders;
+        _activeOrdersError = null;
+        notifyListeners();
+      },
+      onError: (Object error) {
+        _activeOrdersError = error.toString();
+        // ignore: avoid_print
+        print('Active orders stream error: $error');
+        notifyListeners();
+      },
+    );
   }
 
   Stream<List<FoodOrder>> streamDeliveredOrders() =>

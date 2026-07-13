@@ -11,6 +11,7 @@ import UIKit
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GMSServices.provideAPIKey("AIzaSyCruXFbmeJFxXr2eKdnkVmkr51Wop74K70")
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
 }

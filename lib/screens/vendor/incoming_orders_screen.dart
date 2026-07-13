@@ -42,10 +42,49 @@ class IncomingOrdersScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final orderProvider = context.watch<OrderProvider>();
     final orders = orderProvider.activeOrders;
+    final error = orderProvider.activeOrdersError;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Incoming Orders')),
-      body: orders.isEmpty
+      body: error != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 40,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      "Orders couldn't load",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      error,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'If this mentions an "index", open the link Firestore '
+                      'printed in the debug console and click Create — it '
+                      'takes a minute to build, then this works permanently.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : orders.isEmpty
           ? const Center(child: Text('No active orders right now'))
           : ListView.builder(
               padding: const EdgeInsets.all(16),
