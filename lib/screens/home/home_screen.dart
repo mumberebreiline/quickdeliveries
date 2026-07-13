@@ -27,6 +27,21 @@ class HomeScreen extends StatelessWidget {
       price: 7000,
       imageUrl: 'assets/images/IMG-rolex.jpg',
     ),
+    Product(
+      title: 'Rice and chicken',
+      price: 6000,
+      imageUrl: 'assets/images/Screenshot_2026-07-12-20-14-18-85.jpg',
+    ),
+    Product(
+      title: 'Chips and chicken',
+      price: 10000,
+      imageUrl: 'assets/images/Screenshot_2026-07-12-20-20-59-94.jpg',
+    ),
+    Product(
+      title: 'Fries and whole chicken',
+      price: 12000,
+      imageUrl: 'assets/images/Screenshot_2026-07-12-20-22-22-80.jpg',
+    ),
   ];
 
   @override
