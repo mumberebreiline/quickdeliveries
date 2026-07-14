@@ -163,8 +163,11 @@ class OrderProvider extends ChangeNotifier {
   }
 
   /// Builds today's delivery plan out of whatever orders are currently
-  /// active, starting from wherever the vendor currently is.
-  RoutePlan buildRoutePlan(Location vendorLocation) {
+  /// active, starting from wherever the vendor currently is. Async now,
+  /// since it checks live weather/traffic/hazard conditions before
+  /// sequencing — call this once (e.g. on screen load or a manual
+  /// refresh button), not on every rebuild.
+  Future<RoutePlan> buildRoutePlan(Location vendorLocation) {
     return _routeOptimizer.buildDeliveryPlan(
       _activeOrders,
       vendorStart: vendorLocation,

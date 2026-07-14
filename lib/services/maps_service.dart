@@ -57,6 +57,24 @@ class MapsService {
       }
     }
 
+    // Flagged hazards near the route, so the vendor sees *why* the plan
+    // routed around (or through, with extra time) a given spot.
+    for (final hazard in plan.conditions.activeHazards) {
+      markers.add(
+        Marker(
+          markerId: MarkerId('hazard_${hazard.id}'),
+          position: LatLng(hazard.latitude, hazard.longitude),
+          infoWindow: InfoWindow(
+            title: 'Reported hazard',
+            snippet: hazard.description,
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueOrange,
+          ),
+        ),
+      );
+    }
+
     return markers;
   }
 

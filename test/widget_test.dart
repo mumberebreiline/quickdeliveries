@@ -12,7 +12,7 @@ import 'package:quickdeliveries/utils/constants.dart';
 // instead of a UI smoke test, this checks the one piece of pure logic
 // that's most important to get right: the route optimizer.
 void main() {
-  test('groups orders into time windows and sequences by distance', () {
+  test('groups orders into time windows and sequences by distance', () async {
     final optimizer = RouteOptimizerService();
     final now = DateTime.now();
 
@@ -52,7 +52,7 @@ void main() {
       createdAt: now,
     );
 
-    final plan = optimizer.buildDeliveryPlan([
+    final plan = await optimizer.buildDeliveryPlan([
       orderA,
       orderB,
     ], vendorStart: CampusLocations.vendorBase);
