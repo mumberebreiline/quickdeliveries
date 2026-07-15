@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:provider/provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/order_provider.dart';
@@ -109,16 +109,30 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
           return Column(
             children: [
-              _ConditionsBanner(conditions: plan.conditions),
+              _AdvisoryPanel(plan: plan),
               SizedBox(
                 height: 260,
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: MapsService.toLatLng(vendorLocation),
-                    zoom: 15.5,
+                child: FlutterMap(
+                  options: MapOptions(
+                    initialCenter: MapsService.toLatLng(vendorLocation),
+                    initialZoom: 15.5,
                   ),
-                  markers: MapsService.buildMarkers(plan, vendorLocation),
-                  polylines: MapsService.buildPolylines(plan, vendorLocation),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.quickdeliveries',
+                    ),
+                    PolylineLayer(
+                      polylines: MapsService.buildPolylines(
+                        plan,
+                        vendorLocation,
+                      ),
+                    ),
+                    MarkerLayer(
+                      markers: MapsService.buildMarkers(plan, vendorLocation),
+                    ),
+                  ],
                 ),
               ),
               Padding(
@@ -172,48 +186,106 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   }
 }
 
-/// Plain-language summary of the conditions the plan was built under —
-/// this is the vendor-facing "why does the route look like this" answer.
-class _ConditionsBanner extends StatelessWidget {
-  final RouteConditions conditions;
+/// The actual "what should I do right now" panel — severity-ranked,
+/// actionable messages instead of a single passive summary line.
+class _AdvisoryPanel extends StatelessWidget {
+  final RoutePlan plan;
 
-  const _ConditionsBanner({required this.conditions});
+  const _AdvisoryPanel({required this.plan});
+
+  Color _backgroundFor(AdvisorySeverity severity) {
+    return switch (severity) {
+      AdvisorySeverity.critical => Colors.red.shade50,
+      AdvisorySeverity.warning => Colors.orange.shade50,
+      AdvisorySeverity.info => Colors.green.shade50,
+    };
+  }
+
+  Color _textFor(AdvisorySeverity severity) {
+    return switch (severity) {
+      AdvisorySeverity.critical => Colors.red.shade800,
+      AdvisorySeverity.warning => Colors.deepOrange,
+      AdvisorySeverity.info => Colors.green.shade800,
+    };
+  }
+
+  IconData _iconFor(AdvisorySeverity severity) {
+    return switch (severity) {
+      AdvisorySeverity.critical => Icons.error,
+      AdvisorySeverity.warning => Icons.warning_amber_rounded,
+      AdvisorySeverity.info => Icons.check_circle,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (!conditions.hasSlowdown && conditions.activeHazards.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(10),
-        color: Colors.green.shade50,
-        child: const Text(
-          '✓ Clear conditions — no weather, traffic, or hazard delays factored in',
-          style: TextStyle(fontSize: 12, color: Colors.green),
-        ),
-      );
-    }
-
-    final notes = <String>[];
-    if (conditions.weather.isStorming || conditions.weather.isRaining) {
-      notes.add(
-        '${conditions.weather.description} — deliveries adjusted slower',
-      );
-    }
-    if (conditions.trafficMultiplier > 1.05) {
-      final percent = ((conditions.trafficMultiplier - 1) * 100).round();
-      notes.add('Traffic is running ~$percent% slower than usual');
-    }
-    if (conditions.activeHazards.isNotEmpty) {
-      notes.add('${conditions.activeHazards.length} flagged hazard(s) nearby');
-    }
+    // Critical first, so the most important thing is never scrolled past.
+    final sorted = List.of(plan.advisories)
+      ..sort((a, b) => b.severity.index.compareTo(a.severity.index));
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      color: Colors.orange.shade50,
-      child: Text(
-        '⚠ ${notes.join(' • ')}',
-        style: const TextStyle(fontSize: 12, color: Colors.deepOrange),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (plan.suggestedDelayMinutes > 0)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade100,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.pause_circle, color: Colors.red, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Suggested: hold this batch about ${plan.suggestedDelayMinutes} '
+                      'minutes before heading out',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          for (final advisory in sorted)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _backgroundFor(advisory.severity),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _iconFor(advisory.severity),
+                    size: 16,
+                    color: _textFor(advisory.severity),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      advisory.message,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _textFor(advisory.severity),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

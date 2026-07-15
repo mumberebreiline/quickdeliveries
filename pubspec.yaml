@@ -8,6 +8,7 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
+  google_fonts: ^6.2.1
   flutter:
     sdk: flutter
 
@@ -35,7 +36,8 @@ dependencies:
   # ==========================
   # Google Maps & Location
   # ==========================
-  google_maps_flutter: ^2.12.3
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
   geolocator: ^14.0.2
   geocoding: ^4.0.0
 

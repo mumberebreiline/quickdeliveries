@@ -1,20 +1,20 @@
-import 'package:flutter/material.dart' show Color;
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' as ll;
+import '../app/theme.dart';
 import '../models/location.dart';
 import 'route_optimizer_service.dart';
 
-/// Turns our own [Location]/[RoutePlan] types into the Marker/Polyline
-/// objects google_maps_flutter needs. Keeping this conversion in one place
-/// means the route optimizer stays completely independent of the Maps SDK
-/// (it's plain Dart, easy to unit-test) — this is the only file that
-/// bridges the two.
+/// Converts our own [Location]/[RoutePlan] types into the Marker/Polyline
+/// widgets flutter_map needs. Same job as before when this used
+/// google_maps_flutter — swapped to OpenStreetMap tiles via flutter_map
+/// since that needs no API key and no billing account at all, which
+/// matters a lot more for a student project than prettier tiles do.
 class MapsService {
-  static LatLng toLatLng(Location location) {
-    return LatLng(location.latitude, location.longitude);
+  static ll.LatLng toLatLng(Location location) {
+    return ll.LatLng(location.latitude, location.longitude);
   }
 
-  /// A distinct colour per time-window, so the vendor can visually tell
-  /// batches apart on the map (cycles if there are more windows than colours).
   static const List<Color> _windowColors = [
     Color(0xFF1B5E20), // primary green
     Color(0xFFEF6C00), // accent orange
@@ -23,33 +23,28 @@ class MapsService {
     Color(0xFFC62828), // red
   ];
 
-  static Set<Marker> buildMarkers(RoutePlan plan, Location vendorStart) {
-    final markers = <Marker>{
+  static List<Marker> buildMarkers(RoutePlan plan, Location vendorStart) {
+    final markers = <Marker>[
       Marker(
-        markerId: const MarkerId('vendor_start'),
-        position: toLatLng(vendorStart),
-        infoWindow: InfoWindow(title: vendorStart.name),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+        point: toLatLng(vendorStart),
+        width: 44,
+        height: 44,
+        child: const Icon(Icons.storefront, color: Colors.deepPurple, size: 34),
       ),
-    };
+    ];
 
     var stopNumber = 1;
     for (final window in plan.windows) {
       for (final stop in window.stops) {
+        final isAtRisk = stop.isAtRiskOfLateness;
         markers.add(
           Marker(
-            markerId: MarkerId(stop.order.id),
-            position: toLatLng(stop.order.deliveryLocation),
-            infoWindow: InfoWindow(
-              title: '$stopNumber. ${stop.order.deliveryLocation.name}',
-              snippet:
-                  '${stop.order.customerName} — '
-                  '${stop.isAtRiskOfLateness ? "at risk of lateness" : "on time"}',
-            ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              stop.isAtRiskOfLateness
-                  ? BitmapDescriptor.hueRed
-                  : BitmapDescriptor.hueGreen,
+            point: toLatLng(stop.order.deliveryLocation),
+            width: 40,
+            height: 40,
+            child: _NumberedPin(
+              number: stopNumber,
+              color: isAtRisk ? Colors.red : AppColors.primaryGreen,
             ),
           ),
         );
@@ -57,19 +52,18 @@ class MapsService {
       }
     }
 
-    // Flagged hazards near the route, so the vendor sees *why* the plan
-    // routed around (or through, with extra time) a given spot.
+    // Flagged hazards, so the vendor sees why the plan routed around
+    // (or through, with extra time) a given spot.
     for (final hazard in plan.conditions.activeHazards) {
       markers.add(
         Marker(
-          markerId: MarkerId('hazard_${hazard.id}'),
-          position: LatLng(hazard.latitude, hazard.longitude),
-          infoWindow: InfoWindow(
-            title: 'Reported hazard',
-            snippet: hazard.description,
-          ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueOrange,
+          point: ll.LatLng(hazard.latitude, hazard.longitude),
+          width: 34,
+          height: 34,
+          child: const Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.orange,
+            size: 28,
           ),
         ),
       );
@@ -78,18 +72,16 @@ class MapsService {
     return markers;
   }
 
-  /// Straight-line path between consecutive stops for each time-window
-  /// (matches the Haversine distance the optimizer already uses — this is
-  /// an honest visual of what's being optimized, not a real driving route).
-  /// Swap for Google Directions polylines later if turn-by-turn roads
-  /// matter more than a quick visual.
-  static Set<Polyline> buildPolylines(RoutePlan plan, Location vendorStart) {
-    final polylines = <Polyline>{};
+  /// Straight-line path between consecutive stops per time-window — an
+  /// honest visual of what's being optimized (matches the Haversine
+  /// distance the optimizer itself uses), not a real turn-by-turn route.
+  static List<Polyline> buildPolylines(RoutePlan plan, Location vendorStart) {
+    final polylines = <Polyline>[];
     Location current = vendorStart;
     var windowIndex = 0;
 
     for (final window in plan.windows) {
-      final points = <LatLng>[toLatLng(current)];
+      final points = <ll.LatLng>[toLatLng(current)];
       for (final stop in window.stops) {
         points.add(toLatLng(stop.order.deliveryLocation));
       }
@@ -99,15 +91,49 @@ class MapsService {
 
       polylines.add(
         Polyline(
-          polylineId: PolylineId('window_$windowIndex'),
           points: points,
           color: _windowColors[windowIndex % _windowColors.length],
-          width: 4,
+          strokeWidth: 4,
         ),
       );
       windowIndex++;
     }
 
     return polylines;
+  }
+}
+
+class _NumberedPin extends StatelessWidget {
+  final int number;
+  final Color color;
+
+  const _NumberedPin({required this.number, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 4),
+            ],
+          ),
+          child: Text(
+            '$number',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

@@ -1,13 +1,6 @@
 import '../models/location.dart';
 import '../models/product.dart';
 
-/// App-wide constants. Colors match what's already used in homescreen.dart
-/// so every screen we add stays visually consistent.
-class AppColors {
-  static const int primaryGreenValue = 0xFF1B5E20;
-  static const int accentOrangeValue = 0xFFEF6C00; // Colors.orange[700]
-}
-
 class AppConfig {
   /// How wide each delivery time-window bucket is. Orders that want food
   /// around the same time get grouped together so the vendor can batch-cook
@@ -110,40 +103,13 @@ class CampusLocations {
 class SampleMenu {
   static const List<Product> items = [
     Product(
-      id: 'whole_matooke_meat',
-      name: 'Whole Matooke with Meat',
-      description: 'Steamed matooke served with a rich meat stew.',
-      price: 8000,
-      imageUrl: 'assets/images/IMG-whole-matooke-with-meat.jpg',
-    ),
-    Product(
-      id: 'matooke_irish_chicken',
-      name: 'Matooke and Irish with Chicken',
-      description: 'Irish potatoes and matooke served with chicken.',
-      price: 12000,
-      imageUrl: 'assets/images/IMG-matookeandirish-with-chicken.jpg',
-    ),
-    Product(
-      id: 'rice_beans',
-      name: 'Rice with Beans',
-      description: 'A hearty plate of rice and beans.',
-      price: 5000,
-      imageUrl: 'assets/images/IMG-rice-with-beans.jpg',
-    ),
-    Product(
-      id: 'rice_peas',
-      name: 'Rice with Peas',
-      description: 'Rice served with peas stew.',
-      price: 5000,
-      imageUrl: 'assets/images/IMG-rice-with-peas.jpg',
-    ),
-    Product(
       id: 'rolex',
       name: 'Rolex',
       description: 'Fried chapati rolled with egg, tomato and avocado.',
       price: 7000,
       imageUrl: 'assets/images/IMG-rolex.jpg',
-      category: 'Snack',
+      category: 'Breakfast',
+      isFeatured: true,
     ),
     Product(
       id: 'passion_juice',
@@ -151,7 +117,48 @@ class SampleMenu {
       description: 'Freshly squeezed passion fruit juice.',
       price: 3000,
       imageUrl: 'assets/images/IMG-passion-fruit-juice.jpg',
-      category: 'Drink',
+      category: 'Drinks',
+    ),
+    Product(
+      id: 'whole_matooke_meat',
+      name: 'Whole Matooke with Meat',
+      description: 'Steamed matooke served with a rich meat stew.',
+      price: 8000,
+      imageUrl: 'assets/images/IMG-whole-matooke-with-meat.jpg',
+      category: 'Mains',
+      isFeatured: true,
+    ),
+    Product(
+      id: 'matooke_irish_chicken',
+      name: 'Matooke and Irish with Chicken',
+      description: 'Irish potatoes and matooke served with chicken.',
+      price: 12000,
+      imageUrl: 'assets/images/IMG-matookeandirish-with-chicken.jpg',
+      category: 'Mains',
+    ),
+    Product(
+      id: 'rice_beans',
+      name: 'Rice with Beans',
+      description: 'A hearty plate of rice and beans.',
+      price: 5000,
+      imageUrl: 'assets/images/IMG-rice-with-beans.jpg',
+      category: 'Mains',
+    ),
+    Product(
+      id: 'rice_peas',
+      name: 'Rice with Peas',
+      description: 'Rice served with peas stew.',
+      price: 5000,
+      imageUrl: 'assets/images/IMG-rice-with-peas.jpg',
+      category: 'Mains',
+    ),
+    Product(
+      id: 'samosa',
+      name: 'Samosa (2 pieces)',
+      description: 'Crispy pastry filled with spiced minced meat.',
+      price: 2500,
+      imageUrl: 'assets/images/IMG-20260710-WA0023.jpg',
+      category: 'Snacks',
     ),
   ];
 }

@@ -6,6 +6,19 @@ import 'hazard_service.dart';
 import 'traffic_service.dart';
 import 'weather_service.dart';
 
+/// How urgent a piece of advice is — drives both sort order and color
+/// when shown to the vendor.
+enum AdvisorySeverity { info, warning, critical }
+
+/// One concrete, actionable recommendation — not a raw number, an actual
+/// answer to "what should I do about this."
+class AdvisoryMessage {
+  final AdvisorySeverity severity;
+  final String message;
+
+  const AdvisoryMessage({required this.severity, required this.message});
+}
+
 /// One stop on the vendor's planned route.
 class RouteStop {
   final FoodOrder order;
@@ -63,8 +76,15 @@ class RouteConditions {
 class RoutePlan {
   final List<TimeWindowGroup> windows;
   final RouteConditions conditions;
+  final List<AdvisoryMessage> advisories;
+  final int suggestedDelayMinutes;
 
-  const RoutePlan({required this.windows, required this.conditions});
+  const RoutePlan({
+    required this.windows,
+    required this.conditions,
+    this.advisories = const [],
+    this.suggestedDelayMinutes = 0,
+  });
 
   double get totalDistanceKm =>
       windows.fold(0.0, (sum, w) => sum + w.groupDistanceKm);
@@ -227,7 +247,120 @@ class RouteOptimizerService {
       windows.add(TimeWindowGroup(windowStart: windowStart, stops: stops));
     }
 
-    return RoutePlan(windows: windows, conditions: conditions);
+    final allStops = windows.expand((w) => w.stops).toList();
+    final atRiskCount = allStops.where((s) => s.isAtRiskOfLateness).length;
+    final advisories = _generateAdvisories(
+      weather: weather,
+      trafficMultiplier: trafficMultiplier,
+      hazards: hazards,
+      totalStops: allStops.length,
+      atRiskCount: atRiskCount,
+    );
+    final suggestedDelay = _suggestedDelayMinutes(
+      weather,
+      hazards,
+      atRiskCount,
+      allStops.length,
+    );
+
+    return RoutePlan(
+      windows: windows,
+      conditions: conditions,
+      advisories: advisories,
+      suggestedDelayMinutes: suggestedDelay,
+    );
+  }
+
+  /// Turns raw conditions into plain answers to "what should I actually do
+  /// right now" — this is the part that matters more than the numbers.
+  List<AdvisoryMessage> _generateAdvisories({
+    required WeatherCondition weather,
+    required double trafficMultiplier,
+    required List<RouteHazard> hazards,
+    required int totalStops,
+    required int atRiskCount,
+  }) {
+    final advisories = <AdvisoryMessage>[];
+
+    if (weather.isStorming) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.critical,
+          message:
+              'Thunderstorm right now. If it\'s not safe to walk, consider '
+              'holding this batch 15-20 minutes and messaging customers — a '
+              'short delay beats risking a fall or ruined food in a storm.',
+        ),
+      );
+    } else if (weather.isRaining) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.warning,
+          message:
+              'It\'s raining. Cover the food before heading out, and the '
+              'ETAs below already assume you\'ll be moving slower than usual.',
+        ),
+      );
+    }
+
+    if (hazards.isNotEmpty) {
+      final names = hazards.map((h) => h.description).take(2).join('; ');
+      advisories.add(
+        AdvisoryMessage(
+          severity: AdvisorySeverity.warning,
+          message:
+              '${hazards.length} flagged hazard(s) near this route ($names'
+              '${hazards.length > 2 ? ', and more' : ''}) — extra time is '
+              'already built into the affected stops below.',
+        ),
+      );
+    }
+
+    if (totalStops > 0 && atRiskCount == totalStops) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.critical,
+          message:
+              'Every stop on this run is likely to be late under current '
+              'conditions. Worth messaging all of today\'s customers now '
+              'rather than rushing and risking an accident.',
+        ),
+      );
+    } else if (atRiskCount > 0) {
+      advisories.add(
+        AdvisoryMessage(
+          severity: AdvisorySeverity.warning,
+          message:
+              '$atRiskCount of $totalStops stop(s) are likely to run late. '
+              'Consider giving those customers a heads-up now.',
+        ),
+      );
+    }
+
+    if (advisories.isEmpty) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.info,
+          message: 'Conditions look clear — this route should run on schedule.',
+        ),
+      );
+    }
+
+    return advisories;
+  }
+
+  /// A rough, honest suggestion for how long to hold the batch, when
+  /// conditions call for it — 0 means "no reason to wait."
+  int _suggestedDelayMinutes(
+    WeatherCondition weather,
+    List<RouteHazard> hazards,
+    int atRiskCount,
+    int totalStops,
+  ) {
+    if (weather.isStorming) return 20;
+    if (atRiskCount == totalStops && totalStops > 0 && weather.isRaining)
+      return 15;
+    return 0;
   }
 
   Map<DateTime, List<FoodOrder>> _groupByTimeWindow(

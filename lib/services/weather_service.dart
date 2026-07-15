@@ -39,7 +39,7 @@ class WeatherCondition {
 /// [WeatherCondition.clear] — the app keeps working, it just won't factor
 /// in weather until the key is added.
 class WeatherService {
-  static const String _apiKey = 'YOUR_OPENWEATHERMAP_API_KEY';
+  static const String _apiKey = 'bd761a0fa9b061066958f62a996bb5d4';
 
   Future<WeatherCondition> getCurrentConditions(Location location) async {
     if (_apiKey == 'YOUR_OPENWEATHERMAP_API_KEY') {
