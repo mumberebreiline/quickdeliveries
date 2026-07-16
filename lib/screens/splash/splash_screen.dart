@@ -20,7 +20,7 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
     // Wait, then move on to Home. pushReplacementNamed so Splash isn't
     // left on the back stack.
-    _autoAdvanceTimer = Timer(const Duration(seconds: 2), () {
+    _autoAdvanceTimer = Timer(const Duration(seconds: 4), () {
       if (mounted) {
         Navigator.pushReplacementNamed(context, AppRoutes.home);
       }
