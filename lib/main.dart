@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'screens/home/home_screen.dart';
 
-import 'firebase_options.dart';
-import 'app/app.dart';
+void main() {
+  runApp(const MyApp());
+}
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
-  runApp(const App());
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: HomeScreen(),
+    );
+  }
 }

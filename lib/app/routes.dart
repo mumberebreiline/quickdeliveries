@@ -16,5 +16,5 @@ class AppRoutes {
 /// Each teammate only touches the ONE line for the screen they own.
 final Map<String, WidgetBuilder> appRoutes = {
   AppRoutes.splash: (context) => const SplashScreen(),
-  AppRoutes.home: (context) => const HomeScreen(),
+  AppRoutes.home: (context) =>  HomeScreen(),
 };

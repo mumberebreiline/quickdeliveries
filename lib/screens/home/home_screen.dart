@@ -1,222 +1,180 @@
 import 'package:flutter/material.dart';
-import 'package:quickdeliveries/models/product.dart';
-import 'package:quickdeliveries/screens/order/order_screen.dart'; 
+import 'package:carousel_slider/carousel_slider.dart';
+import '../order/menu_screen.dart';
+import 'about_us_screen.dart';
+import 'feedback_screen.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  HomeScreen({super.key});
 
-  // Strongly typed using your Product class instead of raw Map
-  final List<Product> menuItems = const [
-    Product(
-      title: 'Matooke with meat',
-      price: 8000,
-      imageUrl: 'assets/images/IMG-whole-matooke-with-meat.jpg',
-    ),
-    Product(
-      title: 'Matooke & Groundnut Sauce',
-      price: 5000,
-      imageUrl: 'assets/images/IMG-20260710-WA0023.jpg',
-    ),
-    Product(
-      title: 'Matooke and Irish with Chicken',
-      price: 12000,
-      imageUrl: 'assets/images/IMG-matookeandirish-with-chicken.jpg',
-    ),
-    Product(
-      title: 'Rolex',
-      price: 7000,
-      imageUrl: 'assets/images/IMG-rolex.jpg',
-    ),
-    Product(
-      title: 'Rice and chicken',
-      price: 6000,
-      imageUrl: 'assets/images/Screenshot_2026-07-12-20-14-18-85.jpg',
-    ),
-    Product(
-      title: 'Chips and chicken',
-      price: 10000,
-      imageUrl: 'assets/images/Screenshot_2026-07-12-20-20-59-94.jpg',
-    ),
-    Product(
-      title: 'Fries and whole chicken',
-      price: 12000,
-      imageUrl: 'assets/images/Screenshot_2026-07-12-20-22-22-80.jpg',
-    ),
+  final List<String> images = [
+    "assets/images/food1.jpg",
+    "assets/images/food2.jpg",
+    "assets/images/food3.jpg",
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1B5E20), // Dark green theme
-        elevation: 0,
-        leading: const Icon(Icons.menu, color: Colors.white),
-        title: const Text(
-          'Our Menu',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-        actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.shopping_cart, color: Colors.white),
-                onPressed: () {},
-              ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: Colors.orange,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 16,
-                    minHeight: 16,
-                  ),
-                  child: const Text(
-                    '2',
-                    style: TextStyle(color: Colors.white, fontSize: 10),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              )
-            ],
-          ),
-        ],
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      body: Stack(
         children: [
-          // Subtitle header banner
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
-            child: Text(
-              'Enjoy our delicious local dishes',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
-              ),
+          // Sliding food images
+
+          CarouselSlider(
+            options: CarouselOptions(
+              height: double.infinity,
+              viewportFraction: 1,
+              autoPlay: true,
+              autoPlayInterval: const Duration(seconds: 4),
             ),
+            items: images.map((image) {
+              return Image.asset(
+                image,
+                fit: BoxFit.cover,
+                width: double.infinity,
+              );
+            }).toList(),
           ),
-          // Scrollable Menu List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: menuItems.length,
-              itemBuilder: (context, index) {
-                final product = menuItems[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+
+          // Dark transparent layer
+
+          Container(
+            color: Colors.black.withValues(alpha: 0.45),
+          ),
+
+          SafeArea(
+            child: Column(
+              children: [
+                // Top navigation
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 30,
+                    vertical: 20,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Food Image Clip (Fixed: Changed from Image.network to Image.asset)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.asset(
-                            product.imageUrl,
-                            width: 90,
-                            height: 90,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                              width: 90,
-                              height: 90,
-                              color: Colors.grey[200],
-                              child: const Icon(Icons.fastfood, color: Colors.grey),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Image.asset(
+                        "assets/images/logo.png",
+                        height: 55,
+                      ),
+                      Row(
+                        children: [
+                          navItem(
+                            context,
+                            "Menu",
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const MenuScreen(),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Food Details
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                product.title,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                          navItem(
+                            context,
+                            "Login",
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => LoginScreen(),
                               ),
-                              const SizedBox(height: 12),
-                              // Price and Order Button Row
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'UGX ${product.price}',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w900,
-                                      color: Color(0xFF1B5E20),
-                                    ),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => OrderScreen(
-                                            product: product,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.orange[700],
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 8,
-                                      ),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      elevation: 0,
-                                    ),
-                                    child: const Text(
-                                      'Order',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
+                          navItem(
+                            context,
+                            "About Us",
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AboutUsScreen(),
+                              ),
+                            ),
+                          ),
+                          navItem(
+                            context,
+                            "Feedback",
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const FeedbackScreen(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                ),
+
+                const Spacer(),
+
+                // Center content
+
+                const Text(
+                  "Delicious meals\nmade with love",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 42,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MenuScreen()//MealCategoryScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 50,
+                      vertical: 18,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
                     ),
                   ),
-                );
-              },
+                  child: const Text(
+                    "START ORDER",
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 80),
+              ],
             ),
-          ),
+          )
         ],
+      ),
+    );
+  }
+
+  Widget navItem(BuildContext context, String title, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+          ),
+        ),
       ),
     );
   }
