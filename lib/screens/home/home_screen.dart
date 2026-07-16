@@ -9,9 +9,9 @@ class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
 
   final List<String> images = [
-    "assets/images/food1.jpg",
-    "assets/images/food2.jpg",
-    "assets/images/food3.jpg",
+    "assets/images/beef-stew-30.jpg",
+    "assets/images/Screenshot_2026-07-12-20-12-22-13.jpg",
+    "assets/images/Screenshot_2026-07-12-20-14-18-85.jpg",
   ];
 
   @override
@@ -57,7 +57,7 @@ class HomeScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Image.asset(
-                        "assets/images/logo.png",
+                        "assets/images/logo.jpg",
                         height: 55,
                       ),
                       Row(
