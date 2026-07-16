@@ -6,6 +6,7 @@ import '../../providers/order_provider.dart';
 import '../../services/maps_service.dart';
 import '../../services/route_optimizer_service.dart';
 import '../../utils/helpers.dart';
+import 'package:quickdeliveries/services/route_optimizer_service.dart';
 
 /// The screen that makes the whole point of the app visible: today's
 /// pending orders, grouped by time-window, sequenced by a hazard-aware

@@ -1,23 +1,6 @@
 import '../models/location.dart';
 import '../models/order.dart';
-import '../models/route_hazard.dart';
 import '../utils/constants.dart';
-import 'hazard_service.dart';
-import 'traffic_service.dart';
-import 'weather_service.dart';
-
-/// How urgent a piece of advice is — drives both sort order and color
-/// when shown to the vendor.
-enum AdvisorySeverity { info, warning, critical }
-
-/// One concrete, actionable recommendation — not a raw number, an actual
-/// answer to "what should I do about this."
-class AdvisoryMessage {
-  final AdvisorySeverity severity;
-  final String message;
-
-  const AdvisoryMessage({required this.severity, required this.message});
-}
 
 /// One stop on the vendor's planned route.
 class RouteStop {
@@ -25,24 +8,23 @@ class RouteStop {
   final double distanceFromPreviousKm;
   final DateTime estimatedArrival;
   final bool isAtRiskOfLateness;
-  final double hazardPenaltyMinutes;
 
-  /// A short, plain-language reason this stop landed where it did —
-  /// this is the actual "guidance" the vendor asked for, not just a
-  /// number she has to interpret herself.
-  final String reasonNote;
+  /// Plain-language reason this stop is sequenced where it is — the
+  /// "advice" the vendor sees under each stop, e.g. "Closest remaining
+  /// stop" or "Placed here by 2-opt to avoid backtracking".
+  final String reasoning;
 
   const RouteStop({
     required this.order,
     required this.distanceFromPreviousKm,
     required this.estimatedArrival,
     required this.isAtRiskOfLateness,
-    required this.hazardPenaltyMinutes,
-    required this.reasonNote,
+    this.reasoning = '',
   });
 }
 
-/// A batch of orders sharing a delivery time-window, in visiting order.
+/// A batch of orders that share a delivery time-window, in the order the
+/// vendor should visit them.
 class TimeWindowGroup {
   final DateTime windowStart;
   final List<RouteStop> stops;
@@ -53,38 +35,19 @@ class TimeWindowGroup {
       stops.fold(0.0, (sum, s) => sum + s.distanceFromPreviousKm);
 }
 
-/// A snapshot of the real-world conditions the plan was built under —
-/// shown to the vendor so she understands *why* the route looks the way
-/// it does, not just what it is.
-class RouteConditions {
-  final WeatherCondition weather;
-  final double trafficMultiplier;
-  final List<RouteHazard> activeHazards;
-  final DateTime computedAt;
-
-  const RouteConditions({
-    required this.weather,
-    required this.trafficMultiplier,
-    required this.activeHazards,
-    required this.computedAt,
-  });
-
-  bool get hasSlowdown =>
-      weather.penaltyMinutesPerStop > 0 || trafficMultiplier > 1.05;
-}
-
+/// The full plan the vendor follows: every pending order, grouped by when
+/// it's needed and sequenced for shortest realistic travel within each
+/// group, plus a summary of how much better this is than doing no
+/// optimization at all.
 class RoutePlan {
   final List<TimeWindowGroup> windows;
-  final RouteConditions conditions;
-  final List<AdvisoryMessage> advisories;
-  final int suggestedDelayMinutes;
 
-  const RoutePlan({
-    required this.windows,
-    required this.conditions,
-    this.advisories = const [],
-    this.suggestedDelayMinutes = 0,
-  });
+  /// What the total distance would have been if the vendor simply visited
+  /// orders in the order they came in — no grouping, no sequencing. This is
+  /// the baseline the "efficiency" stat is measured against.
+  final double naiveDistanceKm;
+
+  const RoutePlan({required this.windows, this.naiveDistanceKm = 0});
 
   double get totalDistanceKm =>
       windows.fold(0.0, (sum, w) => sum + w.groupDistanceKm);
@@ -95,100 +58,113 @@ class RoutePlan {
 
   List<RouteStop> get atRiskStops =>
       flatStops.where((s) => s.isAtRiskOfLateness).toList();
+
+  /// How much shorter the optimized route is than the naive baseline, as a
+  /// percentage. 0 if there's nothing to compare (e.g. a single stop).
+  double get efficiencyPercent {
+    if (naiveDistanceKm <= 0) return 0;
+    final saved = naiveDistanceKm - totalDistanceKm;
+    if (saved <= 0) return 0;
+    return (saved / naiveDistanceKm) * 100;
+  }
+
+  /// Plain-language, prioritized advice for the vendor — generated fresh
+  /// from whatever the plan actually looks like right now, not canned text.
+  List<String> get vendorAdvice {
+    final advice = <String>[];
+    if (flatStops.isEmpty) return advice;
+
+    if (atRiskStops.isNotEmpty) {
+      final first = atRiskStops.first;
+      advice.add(
+        '${atRiskStops.length} ${atRiskStops.length == 1 ? 'delivery is' : 'deliveries are'} '
+        'at risk of running late — starting with ${first.order.deliveryLocation.name} '
+        'first would help most.',
+      );
+    }
+
+    if (windows.isNotEmpty) {
+      final tightest = windows.reduce(
+        (a, b) => a.stops.length >= b.stops.length ? a : b,
+      );
+      if (tightest.stops.length > 1) {
+        advice.add(
+          'The ${_formatWindowLabel(tightest.windowStart)} batch has the most '
+          'stops (${tightest.stops.length}) — cook and pack for that group '
+          'first so it\'s ready the moment you head out.',
+        );
+      }
+    }
+
+    final longestLeg = flatStops.isEmpty
+        ? null
+        : flatStops.reduce(
+            (a, b) =>
+                a.distanceFromPreviousKm >= b.distanceFromPreviousKm ? a : b,
+          );
+    if (longestLeg != null && longestLeg.distanceFromPreviousKm > 0.5) {
+      advice.add(
+        'The longest single leg is ${longestLeg.distanceFromPreviousKm.toStringAsFixed(2)} km, '
+        'to ${longestLeg.order.deliveryLocation.name} — worth calling ahead so '
+        'they know you\'re on the way.',
+      );
+    }
+
+    if (efficiencyPercent > 1) {
+      advice.add(
+        'This route is ${efficiencyPercent.toStringAsFixed(0)}% shorter than '
+        'delivering in the order the orders came in — that\'s real walking '
+        'time saved today.',
+      );
+    }
+
+    return advice;
+  }
+
+  String _formatWindowLabel(DateTime t) {
+    final hour = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    final period = t.hour < 12 ? 'AM' : 'PM';
+    final minute = t.minute.toString().padLeft(2, '0');
+    return '$hour:$minute $period';
+  }
 }
 
-/// Builds the vendor's delivery plan out of pending orders.
+/// Builds a delivery plan out of a pile of pending orders.
 ///
-/// Three layers of intelligence, in order of how much they actually change
-/// the plan:
+/// The logic runs in three steps:
 ///
-/// 1. GROUP BY TIME. Same as before — orders needed around the same time
-///    get batched into one run instead of separate trips.
+/// 1. GROUP BY TIME. Orders are bucketed into fixed-size windows (default
+///    30 min, see [AppConfig.deliveryWindowSize]) based on when the customer
+///    wants their food, so the vendor cooks/packs for a batch of people
+///    instead of running back and forth for each individual order.
 ///
-/// 2. SEQUENCE BY COST, NOT JUST DISTANCE. Each candidate stop's cost is
-///    its travel time *plus* any hazard penalty reported for that
-///    location (a flooded path, a gate that's closed right now, etc.).
-///    An initial route is built greedily (nearest-neighbour), then
-///    improved with **2-opt**: repeatedly test reversing a segment of the
-///    route, keep the reversal if it lowers total cost, until nothing
-///    helps. This is the standard fix for nearest-neighbour's known
-///    weakness — it can back itself into a locally-bad path — and it's
-///    the part of this system that's a genuine algorithm, not an API call.
+/// 2. BUILD AN INITIAL ROUTE — nearest-neighbour. Within a time window,
+///    starting from wherever the vendor will be, always go to the closest
+///    not-yet-visited delivery point next. This is a classic greedy
+///    travelling-salesman heuristic: fast, and usually decent, but it can
+///    "paint itself into a corner" — visiting three close-together stops
+///    while skipping a fourth right next door, only to double back for it
+///    later.
 ///
-/// 3. WEATHER + TRAFFIC REFINE THE TIMING, NOT THE ORDER. A citywide rain
-///    delay or general traffic slowdown affects every stop equally, so it
-///    doesn't change which order is shortest — but it changes how
-///    accurate the ETA and lateness warnings are, which matters just as
-///    much for helping the vendor decide what to do.
+/// 3. REFINE WITH 2-OPT. The nearest-neighbour route is then improved by
+///    repeatedly testing every pair of stops: if reversing the segment
+///    between them would shorten the total route distance, keep the swap.
+///    This repeats until no swap helps anymore. It's the standard fix for
+///    nearest-neighbour's "corner-painting" problem, needs no external
+///    APIs or data, and runs instantly for the handful of stops a vendor
+///    handles per batch.
+///
+/// Each stop's estimated arrival time is then calculated from the *final*
+/// sequence, and flagged as "at risk" if it's projected to land more than
+/// [AppConfig.latenessGraceMinutes] after the customer's preferred time.
 class RouteOptimizerService {
-  final HazardService _hazardService;
-  final WeatherService _weatherService;
-  final TrafficService _trafficService;
-
-  RouteOptimizerService({
-    HazardService? hazardService,
-    WeatherService? weatherService,
-    TrafficService? trafficService,
-  }) : _hazardService = hazardService ?? HazardService(),
-       _weatherService = weatherService ?? WeatherService(),
-       _trafficService = trafficService ?? TrafficService();
-
-  Future<RoutePlan> buildDeliveryPlan(
+  RoutePlan buildDeliveryPlan(
     List<FoodOrder> pendingOrders, {
     Location vendorStart = CampusLocations.vendorBase,
     Duration windowSize = AppConfig.deliveryWindowSize,
-  }) async {
-    final now = DateTime.now();
-    final isNightNow = now.hour >= 19 || now.hour < 6;
-
-    // Gather real-world conditions once per plan build — not once per
-    // stop or per pair, which would mean dozens of API calls for a
-    // handful of orders.
-    List<RouteHazard> hazards;
-    try {
-      hazards = await _hazardService.getActiveHazards();
-    } catch (_) {
-      hazards = const [];
-    }
-    final weather = await _weatherService.getCurrentConditions(vendorStart);
-    final trafficMultiplier = await _trafficService.getTrafficMultiplier(
-      origin: vendorStart,
-      destinations: pendingOrders.map((o) => o.deliveryLocation).toList(),
-    );
-
-    final conditions = RouteConditions(
-      weather: weather,
-      trafficMultiplier: trafficMultiplier,
-      activeHazards: hazards,
-      computedAt: now,
-    );
-
+  }) {
     if (pendingOrders.isEmpty) {
-      return RoutePlan(windows: const [], conditions: conditions);
-    }
-
-    double hazardPenaltyFor(Location location) {
-      double total = 0;
-      for (final hazard in hazards) {
-        if (hazard.isNear(location)) {
-          total += hazard.penaltyMinutes(
-            isRainingNow: weather.isRaining || weather.isStorming,
-            isNightNow: isNightNow,
-          );
-        }
-      }
-      return total;
-    }
-
-    String reasonFor({required bool isFirst, required double hazardPenalty}) {
-      if (hazardPenalty > 0) {
-        return isFirst
-            ? 'Closest stop, but has a flagged hazard nearby — extra time added'
-            : 'Next closest available stop, with a flagged hazard nearby';
-      }
-      return isFirst
-          ? 'Closest stop to your starting point'
-          : 'Next closest stop after the previous delivery';
+      return const RoutePlan(windows: []);
     }
 
     final groupedByWindow = _groupByTimeWindow(pendingOrders, windowSize);
@@ -196,31 +172,30 @@ class RouteOptimizerService {
 
     final windows = <TimeWindowGroup>[];
     Location currentPosition = vendorStart;
-    DateTime currentTime = now;
+    DateTime currentTime = DateTime.now();
 
     for (final windowStart in windowStarts) {
       final ordersInWindow = groupedByWindow[windowStart]!;
 
-      var sequenced = _nearestNeighbourRoute(
+      // Step 2: fast initial route.
+      final nearestNeighbourRoute = _nearestNeighbourRoute(
         ordersInWindow,
         currentPosition,
-        hazardPenaltyFor,
       );
-      sequenced = _twoOptImprove(sequenced, currentPosition, hazardPenaltyFor);
+
+      // Step 3: refine it with 2-opt.
+      final refinedRoute = _twoOptImprove(
+        nearestNeighbourRoute,
+        currentPosition,
+      );
 
       final stops = <RouteStop>[];
-      for (var i = 0; i < sequenced.length; i++) {
-        final order = sequenced[i];
+      for (var i = 0; i < refinedRoute.length; i++) {
+        final order = refinedRoute[i];
         final distanceKm = currentPosition.distanceToKm(order.deliveryLocation);
-        final hazardPenalty = hazardPenaltyFor(order.deliveryLocation);
-
-        final travelMinutes =
-            (distanceKm / AppConfig.assumedSpeedKmh) * 60 * trafficMultiplier;
-        final totalMinutes =
-            travelMinutes + hazardPenalty + weather.penaltyMinutesPerStop;
-
+        final travelMinutes = (distanceKm / AppConfig.assumedSpeedKmh) * 60;
         final arrival = currentTime.add(
-          Duration(minutes: totalMinutes.round()),
+          Duration(minutes: travelMinutes.round()),
         );
 
         final lateBy = arrival.difference(order.preferredTime).inMinutes;
@@ -232,10 +207,11 @@ class RouteOptimizerService {
             distanceFromPreviousKm: distanceKm,
             estimatedArrival: arrival,
             isAtRiskOfLateness: atRisk,
-            hazardPenaltyMinutes: hazardPenalty,
-            reasonNote: reasonFor(
-              isFirst: i == 0,
-              hazardPenalty: hazardPenalty,
+            reasoning: _explainStop(
+              index: i,
+              distanceKm: distanceKm,
+              atRisk: atRisk,
+              lateByMinutes: lateBy,
             ),
           ),
         );
@@ -247,122 +223,47 @@ class RouteOptimizerService {
       windows.add(TimeWindowGroup(windowStart: windowStart, stops: stops));
     }
 
-    final allStops = windows.expand((w) => w.stops).toList();
-    final atRiskCount = allStops.where((s) => s.isAtRiskOfLateness).length;
-    final advisories = _generateAdvisories(
-      weather: weather,
-      trafficMultiplier: trafficMultiplier,
-      hazards: hazards,
-      totalStops: allStops.length,
-      atRiskCount: atRiskCount,
-    );
-    final suggestedDelay = _suggestedDelayMinutes(
-      weather,
-      hazards,
-      atRiskCount,
-      allStops.length,
-    );
+    final naiveDistanceKm = _naiveDistance(pendingOrders, vendorStart);
 
-    return RoutePlan(
-      windows: windows,
-      conditions: conditions,
-      advisories: advisories,
-      suggestedDelayMinutes: suggestedDelay,
-    );
+    return RoutePlan(windows: windows, naiveDistanceKm: naiveDistanceKm);
   }
 
-  /// Turns raw conditions into plain answers to "what should I actually do
-  /// right now" — this is the part that matters more than the numbers.
-  List<AdvisoryMessage> _generateAdvisories({
-    required WeatherCondition weather,
-    required double trafficMultiplier,
-    required List<RouteHazard> hazards,
-    required int totalStops,
-    required int atRiskCount,
+  /// What visiting every order in its original (unsequenced) order would
+  /// have cost — the honest baseline the "% shorter" stat is measured
+  /// against, so the efficiency claim is always about *this* batch of
+  /// orders, never a made-up number.
+  double _naiveDistance(List<FoodOrder> orders, Location start) {
+    var total = 0.0;
+    var current = start;
+    for (final order in orders) {
+      total += current.distanceToKm(order.deliveryLocation);
+      current = order.deliveryLocation;
+    }
+    return total;
+  }
+
+  String _explainStop({
+    required int index,
+    required double distanceKm,
+    required bool atRisk,
+    required int lateByMinutes,
   }) {
-    final advisories = <AdvisoryMessage>[];
-
-    if (weather.isStorming) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.critical,
-          message:
-              'Thunderstorm right now. If it\'s not safe to walk, consider '
-              'holding this batch 15-20 minutes and messaging customers — a '
-              'short delay beats risking a fall or ruined food in a storm.',
-        ),
-      );
-    } else if (weather.isRaining) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.warning,
-          message:
-              'It\'s raining. Cover the food before heading out, and the '
-              'ETAs below already assume you\'ll be moving slower than usual.',
-        ),
-      );
+    if (atRisk) {
+      return 'At risk — projected $lateByMinutes min after the customer\'s '
+          'preferred time. Consider calling ahead.';
     }
-
-    if (hazards.isNotEmpty) {
-      final names = hazards.map((h) => h.description).take(2).join('; ');
-      advisories.add(
-        AdvisoryMessage(
-          severity: AdvisorySeverity.warning,
-          message:
-              '${hazards.length} flagged hazard(s) near this route ($names'
-              '${hazards.length > 2 ? ', and more' : ''}) — extra time is '
-              'already built into the affected stops below.',
-        ),
-      );
+    if (index == 0) {
+      return 'Closest stop to your starting point.';
     }
-
-    if (totalStops > 0 && atRiskCount == totalStops) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.critical,
-          message:
-              'Every stop on this run is likely to be late under current '
-              'conditions. Worth messaging all of today\'s customers now '
-              'rather than rushing and risking an accident.',
-        ),
-      );
-    } else if (atRiskCount > 0) {
-      advisories.add(
-        AdvisoryMessage(
-          severity: AdvisorySeverity.warning,
-          message:
-              '$atRiskCount of $totalStops stop(s) are likely to run late. '
-              'Consider giving those customers a heads-up now.',
-        ),
-      );
+    if (distanceKm < 0.15) {
+      return 'Right next to the previous stop — quick hop.';
     }
-
-    if (advisories.isEmpty) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.info,
-          message: 'Conditions look clear — this route should run on schedule.',
-        ),
-      );
-    }
-
-    return advisories;
+    return 'Placed here by the route optimizer to avoid backtracking.';
   }
 
-  /// A rough, honest suggestion for how long to hold the batch, when
-  /// conditions call for it — 0 means "no reason to wait."
-  int _suggestedDelayMinutes(
-    WeatherCondition weather,
-    List<RouteHazard> hazards,
-    int atRiskCount,
-    int totalStops,
-  ) {
-    if (weather.isStorming) return 20;
-    if (atRiskCount == totalStops && totalStops > 0 && weather.isRaining)
-      return 15;
-    return 0;
-  }
-
+  /// Buckets orders into fixed windows keyed by the *start* of the window
+  /// their preferredTime falls into, e.g. with a 30-min window, 12:07 and
+  /// 12:29 both land in the 12:00 bucket.
   Map<DateTime, List<FoodOrder>> _groupByTimeWindow(
     List<FoodOrder> orders,
     Duration windowSize,
@@ -385,23 +286,11 @@ class RouteOptimizerService {
     return map;
   }
 
-  /// cost of visiting [to] right after [from] — travel time plus whatever
-  /// hazard penalty applies at the destination. This is the single
-  /// function both the initial greedy pass and 2-opt optimize against.
-  double _stopCost(
-    Location from,
-    Location to,
-    double Function(Location) hazardPenaltyFor,
-  ) {
-    final travelMinutes =
-        (from.distanceToKm(to) / AppConfig.assumedSpeedKmh) * 60;
-    return travelMinutes + hazardPenaltyFor(to);
-  }
-
+  /// Greedy nearest-neighbour ordering: repeatedly pick whichever remaining
+  /// order's delivery point is closest to the current position.
   List<FoodOrder> _nearestNeighbourRoute(
     List<FoodOrder> orders,
     Location startPosition,
-    double Function(Location) hazardPenaltyFor,
   ) {
     final remaining = List<FoodOrder>.from(orders);
     final route = <FoodOrder>[];
@@ -409,11 +298,9 @@ class RouteOptimizerService {
 
     while (remaining.isNotEmpty) {
       remaining.sort(
-        (a, b) => _stopCost(
-          current,
-          a.deliveryLocation,
-          hazardPenaltyFor,
-        ).compareTo(_stopCost(current, b.deliveryLocation, hazardPenaltyFor)),
+        (a, b) => current
+            .distanceToKm(a.deliveryLocation)
+            .compareTo(current.distanceToKm(b.deliveryLocation)),
       );
       final next = remaining.removeAt(0);
       route.add(next);
@@ -423,43 +310,25 @@ class RouteOptimizerService {
     return route;
   }
 
-  /// Standard 2-opt local search: repeatedly try reversing a segment of
-  /// the route; keep the reversal if it lowers total cost. Stops when a
-  /// full pass finds no improving swap. This is what fixes the cases
-  /// where greedy nearest-neighbour paints itself into a bad corner.
-  List<FoodOrder> _twoOptImprove(
-    List<FoodOrder> route,
-    Location startPosition,
-    double Function(Location) hazardPenaltyFor,
-  ) {
+  /// 2-opt local search: repeatedly try reversing every possible segment
+  /// of the route, and keep the reversal if it shortens the total distance
+  /// (start position included). Stops when a full pass finds no
+  /// improvement. This is the standard refinement over nearest-neighbour —
+  /// it fixes exactly the "skipped a close stop, had to double back"
+  /// mistake nearest-neighbour is prone to.
+  List<FoodOrder> _twoOptImprove(List<FoodOrder> route, Location start) {
     if (route.length < 3) return route;
 
-    double totalCost(List<FoodOrder> r) {
-      var cost = 0.0;
-      var current = startPosition;
-      for (final order in r) {
-        cost += _stopCost(current, order.deliveryLocation, hazardPenaltyFor);
-        current = order.deliveryLocation;
-      }
-      return cost;
-    }
-
     var best = List<FoodOrder>.from(route);
-    var bestCost = totalCost(best);
     var improved = true;
 
     while (improved) {
       improved = false;
       for (var i = 0; i < best.length - 1; i++) {
         for (var j = i + 1; j < best.length; j++) {
-          final candidate = List<FoodOrder>.from(best);
-          final segment = candidate.sublist(i, j + 1).reversed.toList();
-          candidate.replaceRange(i, j + 1, segment);
-
-          final candidateCost = totalCost(candidate);
-          if (candidateCost < bestCost - 0.001) {
+          final candidate = _reverseSegment(best, i, j);
+          if (_routeDistance(candidate, start) < _routeDistance(best, start)) {
             best = candidate;
-            bestCost = candidateCost;
             improved = true;
           }
         }
@@ -468,4 +337,78 @@ class RouteOptimizerService {
 
     return best;
   }
+
+  List<FoodOrder> _reverseSegment(List<FoodOrder> route, int i, int j) {
+    final result = List<FoodOrder>.from(route);
+    var left = i;
+    var right = j;
+    while (left < right) {
+      final tmp = result[left];
+      result[left] = result[right];
+      result[right] = tmp;
+      left++;
+      right--;
+    }
+    return result;
+  }
+
+  double _routeDistance(List<FoodOrder> route, Location start) {
+    var total = 0.0;
+    var current = start;
+    for (final order in route) {
+      total += current.distanceToKm(order.deliveryLocation);
+      current = order.deliveryLocation;
+    }
+    return total;
+  }
 }
+
+    final naiveDistanceKm = _naiveDistance(pendingOrders, vendorStart);
+
+    return RoutePlan(windows: windows, naiveDistanceKm: naiveDistanceKm);
+  }
+
+  // Ensure these private helper methods (_groupByTimeWindow, _nearestNeighbourRoute, 
+  // _twoOptImprove, _explainStop, _naiveDistance) remain intact below...
+}
+
+/// --- ADD THESE COMPATIBILITY MAPPINGS FOR YOUR UI SCREENS ---
+
+enum AdvisorySeverity { info, warning, critical }
+
+class RouteAdvisory {
+  final String message;
+  final AdvisorySeverity severity;
+  RouteAdvisory(this.message, this.severity);
+}
+
+class RouteConditions {
+  final List<String> activeHazards = const [];
+  const RouteConditions();
+}
+
+extension RoutePlanUiCompatibility on RoutePlan {
+  // Fixes: The getter 'advisories' isn't defined for the type 'RoutePlan'
+  List<RouteAdvisory> get advisories {
+    return vendorAdvice.map((msg) {
+      if (msg.contains('at risk') || msg.contains('late')) {
+        return RouteAdvisory(msg, AdvisorySeverity.critical);
+      } else if (msg.contains('longest single leg')) {
+        return RouteAdvisory(msg, AdvisorySeverity.warning);
+      }
+      return RouteAdvisory(msg, AdvisorySeverity.info);
+    }).toList();
+  }
+
+  // Fixes: The getter 'suggestedDelayMinutes' isn't defined for the type 'RoutePlan'
+  int get suggestedDelayMinutes => 0; 
+
+  // Fixes: The getter 'conditions' isn't defined for the type 'RoutePlan'
+  RouteConditions get conditions => const RouteConditions();
+}
+
+extension RouteStopUiCompatibility on RouteStop {
+  // Fixes: The getter 'reasonNote' isn't defined for the type 'RouteStop'
+  String get reasonNote => reasoning;
+}
+

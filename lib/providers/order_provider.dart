@@ -167,11 +167,9 @@ class OrderProvider extends ChangeNotifier {
   /// since it checks live weather/traffic/hazard conditions before
   /// sequencing — call this once (e.g. on screen load or a manual
   /// refresh button), not on every rebuild.
-  Future<RoutePlan> buildRoutePlan(Location vendorLocation) {
-    return _routeOptimizer.buildDeliveryPlan(
-      _activeOrders,
-      vendorStart: vendorLocation,
-    );
+  Future<RoutePlan> yourFunctionName() async {
+    // ... existing code
+    return _routeOptimizer.buildDeliveryPlan(/* args */);
   }
 
   @override

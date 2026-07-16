@@ -1,15 +1,21 @@
-import 'dart:async';
+import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app/routes.dart';
-import '../../app/theme.dart';
-import '../../models/product.dart';
+import '../../providers/customer_auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../utils/constants.dart';
-import '../../utils/helpers.dart';
-import '../../widgets/featured_item_card.dart';
-import '../../widgets/product_card.dart';
+import '../../widgets/category_tile.dart';
+import '../customer/customer_login_screen.dart';
+import '../order/category_menu_screen.dart';
+import '../vendor/vendor_login_screen.dart';
 
+/// The app's landing screen. A sliding photo hero up top — each slide is
+/// itself clickable straight into that category's menu, the way Café
+/// Javas' app uses its banner to promote a section rather than just
+/// decorate the top of the screen — with the customer/vendor login
+/// corners overlaid, and a horizontally-scrolling strip of category cards
+/// below it.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -18,322 +24,302 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const _categories = ['All', 'Breakfast', 'Mains', 'Drinks', 'Snacks'];
-  static const _rotatingMessages = [
-    'Freshly prepared today',
-    'Delivering across Makerere',
-    "Pick your building and time — we'll handle the route",
-  ];
+  int _heroIndex = 0;
 
-  String _selectedCategory = 'All';
-  String _searchQuery = '';
-  int _messageIndex = 0;
-  Timer? _messageTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _messageTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (!mounted) return;
-      setState(
-        () => _messageIndex = (_messageIndex + 1) % _rotatingMessages.length,
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    _messageTimer?.cancel();
-    super.dispose();
-  }
-
-  List<Product> get _featuredItems =>
-      SampleMenu.items.where((p) => p.isFeatured).toList();
-
-  List<Product> get _filteredItems {
-    return SampleMenu.items.where((p) {
-      final matchesCategory =
-          _selectedCategory == 'All' || p.category == _selectedCategory;
-      final matchesSearch =
-          _searchQuery.isEmpty ||
-          p.name.toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    }).toList();
-  }
+  // Each hero slide doubles as a promo banner for one category — tapping
+  // it goes straight into that category's menu, exactly like tapping a
+  // Café Javas banner takes you into that section instead of just being
+  // decorative.
+  List<MenuCategory> get _heroSlides => MenuCategories.all;
 
   @override
   Widget build(BuildContext context) {
     final orderProvider = context.watch<OrderProvider>();
+    final customerAuth = context.watch<CustomerAuthProvider>();
 
     return Scaffold(
-      backgroundColor: AppColors.cream,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(child: _buildHeader(context)),
-                SliverToBoxAdapter(child: _buildSearchBar()),
-                SliverToBoxAdapter(child: _buildCategoryChips()),
-                if (_selectedCategory == 'All' &&
-                    _searchQuery.isEmpty &&
-                    _featuredItems.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: _buildFeaturedCarousel(orderProvider),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 340,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CarouselSlider(
+                    options: CarouselOptions(
+                      height: 340,
+                      viewportFraction: 1,
+                      autoPlay: true,
+                      autoPlayInterval: const Duration(seconds: 4),
+                      onPageChanged: (index, reason) {
+                        setState(() => _heroIndex = index);
+                      },
+                    ),
+                    items: _heroSlides.map((category) {
+                      return GestureDetector(
+                        onTap: () => _openCategory(context, category),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.asset(
+                              category.imageUrl,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(color: Colors.grey.shade400),
+                            ),
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.black.withOpacity(0.35),
+                                    Colors.black.withOpacity(0.1),
+                                    Colors.black.withOpacity(0.6),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                  sliver: _filteredItems.isEmpty
-                      ? const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.only(top: 40),
-                            child: Center(
-                              child: Text(
-                                'No dishes match — try a different search or category',
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _CornerAccountButton(
+                            icon: Icons.person_outline,
+                            label: customerAuth.isLoggedIn
+                                ? (customerAuth.profile?.name ?? 'Account')
+                                : 'Log in',
+                            onTap: () {
+                              if (customerAuth.isLoggedIn) {
+                                _showCustomerAccountSheet(
+                                  context,
+                                  customerAuth,
+                                );
+                              } else {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const CustomerLoginScreen(),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                          _CornerAccountButton(
+                            icon: Icons.storefront_outlined,
+                            label: 'Vendor',
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const VendorLoginScreen(),
                               ),
                             ),
                           ),
-                        )
-                      : SliverList(
-                          delegate: SliverChildBuilderDelegate((
-                            context,
-                            index,
-                          ) {
-                            final product = _filteredItems[index];
-                            return ProductCard(
-                              product: product,
-                              onAdd: () => orderProvider.addToCart(product),
-                            );
-                          }, childCount: _filteredItems.length),
-                        ),
-                ),
-              ],
-            ),
-            _buildCartBar(context, orderProvider),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Our Menu', style: AppTheme.display(size: 26)),
-                const SizedBox(height: 4),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 400),
-                  child: Text(
-                    _rotatingMessages[_messageIndex],
-                    key: ValueKey(_messageIndex),
-                    style: AppTheme.body(
-                      size: 13,
-                      color: AppColors.charcoal.withOpacity(0.55),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.charcoal.withOpacity(0.08),
-                  blurRadius: 8,
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: const Icon(
-                Icons.storefront_outlined,
-                color: AppColors.primaryGreen,
+                  Positioned(
+                    left: 24,
+                    right: 24,
+                    bottom: 44,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _heroSlides[_heroIndex].displayLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Text(
+                              'Tap to explore',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.arrow_forward_rounded,
+                              color: Colors.white70,
+                              size: 15,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Dot page indicator, so the sliding banner reads as
+                  // navigable rather than purely decorative.
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 20,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(_heroSlides.length, (index) {
+                        final isActive = index == _heroIndex;
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: isActive ? 20 : 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
               ),
-              tooltip: 'Vendor login',
-              onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.vendorLogin),
             ),
           ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Browse by category',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Swipe for more',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 190,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: MenuCategories.all.length,
+                itemBuilder: (context, index) {
+                  final category = MenuCategories.all[index];
+                  final count = SampleMenu.items
+                      .where((p) => p.category == category.categoryName)
+                      .length;
+                  return CategoryTile(
+                    category: category,
+                    itemCount: count,
+                    onTap: () => _openCategory(context, category),
+                  );
+                },
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
+      ),
+      floatingActionButton: orderProvider.cartItemCount > 0
+          ? FloatingActionButton.extended(
+              onPressed: () => Navigator.pushNamed(context, AppRoutes.order),
+              label: Text('View Cart (${orderProvider.cartItemCount})'),
+              icon: const Icon(Icons.shopping_cart_checkout),
+            )
+          : null,
+    );
+  }
+
+  void _openCategory(BuildContext context, MenuCategory category) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CategoryMenuScreen(
+          categoryName: category.categoryName,
+          displayLabel: category.displayLabel,
+        ),
       ),
     );
   }
 
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.charcoal.withOpacity(0.05),
-              blurRadius: 8,
+  void _showCustomerAccountSheet(
+    BuildContext context,
+    CustomerAuthProvider customerAuth,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Log out'),
+              onTap: () {
+                customerAuth.signOut();
+                Navigator.pop(context);
+              },
             ),
           ],
         ),
-        child: TextField(
-          onChanged: (value) => setState(() => _searchQuery = value),
-          style: AppTheme.body(size: 14),
-          decoration: InputDecoration(
-            hintText: 'Search dishes...',
-            hintStyle: AppTheme.body(
-              size: 14,
-              color: AppColors.charcoal.withOpacity(0.4),
-            ),
-            prefixIcon: const Icon(Icons.search, color: AppColors.primaryGreen),
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        ),
       ),
     );
   }
+}
 
-  Widget _buildCategoryChips() {
-    return SizedBox(
-      height: 52,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-        itemCount: _categories.length,
-        itemBuilder: (context, index) {
-          final category = _categories[index];
-          final isSelected = category == _selectedCategory;
-          return Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: ChoiceChip(
-              label: Text(category),
-              selected: isSelected,
-              onSelected: (_) => setState(() => _selectedCategory = category),
-              labelStyle: AppTheme.body(
-                size: 13,
-                weight: FontWeight.w600,
-                color: isSelected ? Colors.white : AppColors.charcoal,
+class _CornerAccountButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _CornerAccountButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withOpacity(0.35),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
               ),
-              selectedColor: AppColors.primaryGreen,
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
-                  color: AppColors.primaryGreen.withOpacity(0.2),
-                ),
-              ),
-              showCheckmark: false,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildFeaturedCarousel(OrderProvider orderProvider) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text('Popular right now', style: AppTheme.display(size: 17)),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 200,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: _featuredItems.length,
-              itemBuilder: (context, index) {
-                final product = _featuredItems[index];
-                return FeaturedItemCard(
-                  product: product,
-                  onAdd: () => orderProvider.addToCart(product),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCartBar(BuildContext context, OrderProvider orderProvider) {
-    final hasItems = orderProvider.cartItemCount > 0;
-
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-      left: 16,
-      right: 16,
-      bottom: hasItems ? 16 : -80,
-      child: Material(
-        borderRadius: BorderRadius.circular(16),
-        color: AppColors.primaryGreen,
-        elevation: 6,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => Navigator.pushNamed(context, AppRoutes.order),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(
-                        color: Colors.white24,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.shopping_bag,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '${orderProvider.cartItemCount} item${orderProvider.cartItemCount == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Text(
-                      formatUgx(orderProvider.cartTotal),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Icon(
-                      Icons.arrow_forward,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+            ],
           ),
         ),
       ),

@@ -28,6 +28,7 @@ class AppRoutes {
   static const String vendorIncoming = '/vendor-incoming';
   static const String vendorRouteMap = '/vendor-route-map';
   static const String vendorHistory = '/vendor-history';
+  static const String vendorHazards = '/vendor-hazards';
 }
 
 /// Maps each route name to the screen that should be shown.

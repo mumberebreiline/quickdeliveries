@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'app/app.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
+import 'providers/customer_auth_provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/order_provider.dart';
 
@@ -16,6 +17,7 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => CustomerAuthProvider()),
         ChangeNotifierProvider(create: (_) => OrderProvider()),
         ChangeNotifierProvider(create: (_) => LocationProvider()),
       ],

@@ -1,6 +1,13 @@
 import '../models/location.dart';
 import '../models/product.dart';
 
+/// App-wide constants. Colors match what's already used in homescreen.dart
+/// so every screen we add stays visually consistent.
+class AppColors {
+  static const int primaryGreenValue = 0xFF1B5E20;
+  static const int accentOrangeValue = 0xFFEF6C00; // Colors.orange[700]
+}
+
 class AppConfig {
   /// How wide each delivery time-window bucket is. Orders that want food
   /// around the same time get grouped together so the vendor can batch-cook
@@ -97,36 +104,54 @@ class CampusLocations {
   }
 }
 
+/// A clickable photo tile on the home screen — tapping it opens
+/// [CategoryMenuScreen] filtered to every [SampleMenu] item whose
+/// `category` matches [categoryName]. This is the "salon"-style browsing
+/// the vendor asked for: a picture that represents a group of dishes,
+/// styled after how Café Javas' app splits its menu into sections.
+class MenuCategory {
+  final String categoryName;
+  final String displayLabel;
+  final String imageUrl;
+
+  const MenuCategory({
+    required this.categoryName,
+    required this.displayLabel,
+    required this.imageUrl,
+  });
+}
+
+class MenuCategories {
+  static const List<MenuCategory> all = [
+    MenuCategory(
+      categoryName: 'Breakfast',
+      displayLabel: 'Breakfasts',
+      imageUrl: 'assets/images/IMG-rolex.jpg',
+    ),
+    MenuCategory(
+      categoryName: 'Main',
+      displayLabel: 'Big Meals',
+      imageUrl: 'assets/images/IMG-whole-matooke-with-meat.jpg',
+    ),
+    MenuCategory(
+      categoryName: 'Drink',
+      displayLabel: 'Drinks',
+      imageUrl: 'assets/images/IMG-passion-fruit-juice.jpg',
+    ),
+  ];
+}
+
 /// Starter menu built from the dishes already in assets/images/. Wire this
 /// to a Firestore 'products' collection once the vendor wants to edit her
 /// own menu from the app instead of from code.
 class SampleMenu {
   static const List<Product> items = [
     Product(
-      id: 'rolex',
-      name: 'Rolex',
-      description: 'Fried chapati rolled with egg, tomato and avocado.',
-      price: 7000,
-      imageUrl: 'assets/images/IMG-rolex.jpg',
-      category: 'Breakfast',
-      isFeatured: true,
-    ),
-    Product(
-      id: 'passion_juice',
-      name: 'Passion Fruit Juice',
-      description: 'Freshly squeezed passion fruit juice.',
-      price: 3000,
-      imageUrl: 'assets/images/IMG-passion-fruit-juice.jpg',
-      category: 'Drinks',
-    ),
-    Product(
       id: 'whole_matooke_meat',
       name: 'Whole Matooke with Meat',
       description: 'Steamed matooke served with a rich meat stew.',
       price: 8000,
       imageUrl: 'assets/images/IMG-whole-matooke-with-meat.jpg',
-      category: 'Mains',
-      isFeatured: true,
     ),
     Product(
       id: 'matooke_irish_chicken',
@@ -134,7 +159,6 @@ class SampleMenu {
       description: 'Irish potatoes and matooke served with chicken.',
       price: 12000,
       imageUrl: 'assets/images/IMG-matookeandirish-with-chicken.jpg',
-      category: 'Mains',
     ),
     Product(
       id: 'rice_beans',
@@ -142,7 +166,6 @@ class SampleMenu {
       description: 'A hearty plate of rice and beans.',
       price: 5000,
       imageUrl: 'assets/images/IMG-rice-with-beans.jpg',
-      category: 'Mains',
     ),
     Product(
       id: 'rice_peas',
@@ -150,15 +173,22 @@ class SampleMenu {
       description: 'Rice served with peas stew.',
       price: 5000,
       imageUrl: 'assets/images/IMG-rice-with-peas.jpg',
-      category: 'Mains',
     ),
     Product(
-      id: 'samosa',
-      name: 'Samosa (2 pieces)',
-      description: 'Crispy pastry filled with spiced minced meat.',
-      price: 2500,
-      imageUrl: 'assets/images/IMG-20260710-WA0023.jpg',
-      category: 'Snacks',
+      id: 'rolex',
+      name: 'Rolex',
+      description: 'Fried chapati rolled with egg, tomato and avocado.',
+      price: 7000,
+      imageUrl: 'assets/images/IMG-rolex.jpg',
+      category: 'Breakfast',
+    ),
+    Product(
+      id: 'passion_juice',
+      name: 'Passion Fruit Juice',
+      description: 'Freshly squeezed passion fruit juice.',
+      price: 3000,
+      imageUrl: 'assets/images/IMG-passion-fruit-juice.jpg',
+      category: 'Drink',
     ),
   ];
 }
