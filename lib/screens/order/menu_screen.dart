@@ -50,12 +50,12 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
     return [
       {
         "title": "Breakfast",
-        "image": "assets/images/images (77).jpeg",
+        "image": "assets/images/menu1.jpeg",
         "screen": const BreakfastSelectionScreen(),
       },
       {
         "title": "Lunch",
-        "image": "assets/images/Screenshot_2026-07-12-20-14-18-85.jpg",
+        "image": "assets/images/home1.jpg",
         "screen": const FoodSelectionScreen(),
       },
       {
