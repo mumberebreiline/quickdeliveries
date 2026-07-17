@@ -8,6 +8,7 @@ import '../home/popular_screen.dart';
 import '../home/login_screen.dart';
 import '../home/about_us_screen.dart';
 import '../home/feedback_screen.dart';
+
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
 
@@ -63,17 +64,17 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
       },
       {
         "title": "Popular",
-        "image": "assets/images/Screenshot_2026-07-12-20-17-18-33.jpg",
+        "image": "assets/images/menu4.jpg",
         "screen": const PopularScreen(),
       },
       {
         "title": "Vegetarians",
-        "image": "assets/images/Screenshot_2026-07-12-20-11-25-60.jpg",
+        "image": "assets/images/menu5.jpg",
         "screen": const PopularScreen(),
       },
       {
         "title": "Drinks",
-        "image": "assets/images/images (35).jpeg",
+        "image": "assets/images/menu6.jpeg",
         "screen": const PopularScreen(),
       },
     ];
@@ -99,10 +100,7 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
       default:
         screen = const MenuScreen();
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => screen),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
   }
 
   @override
@@ -180,7 +178,8 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: filteredCategories.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, // 👈 change this number for more/fewer columns
+                  crossAxisCount:
+                      2, // 👈 change this number for more/fewer columns
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
                   childAspectRatio: 0.95,
