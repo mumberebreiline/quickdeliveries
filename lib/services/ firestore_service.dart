@@ -1,12 +1,20 @@
+<<<<<<< HEAD
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/category.dart';
 import '../models/meal.dart';
 
+=======
+>>>>>>> development
 class FirestoreService {
 
   final FirebaseFirestore _db =
       FirebaseFirestore.instance;
+<<<<<<< HEAD
+=======
+
+}
+>>>>>>> development
 Future<List<Category>> getCategories() async {
 
   final snapshot =
@@ -52,6 +60,9 @@ String category,
     );
 
   }).toList();
+<<<<<<< HEAD
 }
+=======
+>>>>>>> development
 
 }

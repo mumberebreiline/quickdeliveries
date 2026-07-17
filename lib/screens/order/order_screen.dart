@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/location.dart';
@@ -76,9 +75,7 @@ class _OrderScreenState extends State<OrderScreen> {
     }
 
     final orderId = orderProvider.checkout(
-      // If they signed in (optional), this order is tied to their real
-      // account — otherwise a fresh guest id, same as before.
-      customerId: FirebaseAuth.instance.currentUser?.uid ?? const Uuid().v4(),
+      customerId: const Uuid().v4(),
       customerName: _nameController.text.trim(),
       customerPhone: _phoneController.text.trim(),
       deliveryLocation: _selectedBuilding!,
@@ -130,8 +127,6 @@ class _OrderScreenState extends State<OrderScreen> {
                       ),
                     ),
                   ),
-                  if (cart.any((line) => line.product.category == 'Breakfast'))
-                    _DrinkPairingDropdown(orderProvider: orderProvider),
                   const Divider(height: 32),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -212,67 +207,6 @@ class _OrderScreenState extends State<OrderScreen> {
                 ],
               ),
             ),
-    );
-  }
-}
-
-/// Shown whenever the cart has a Breakfast item in it — lets the customer
-/// pair a hot drink with their breakfast right here on the cart screen.
-/// Picking one just adds it as a normal cart line via OrderProvider, so
-/// the running total above updates immediately — no separate pricing
-/// logic needed, it's the same total the rest of the cart already uses.
-class _DrinkPairingDropdown extends StatelessWidget {
-  final OrderProvider orderProvider;
-
-  const _DrinkPairingDropdown({required this.orderProvider});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.local_cafe_outlined,
-            size: 18,
-            color: Colors.deepOrange,
-          ),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'Add a drink with breakfast?',
-              style: TextStyle(fontSize: 13),
-            ),
-          ),
-          DropdownButton<String>(
-            hint: const Text('Choose', style: TextStyle(fontSize: 13)),
-            underline: const SizedBox.shrink(),
-            items: SampleMenu.breakfastDrinkAddOns
-                .map(
-                  (drink) => DropdownMenuItem(
-                    value: drink.id,
-                    child: Text(
-                      '${drink.name} (${formatUgx(drink.price)})',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ),
-                )
-                .toList(),
-            onChanged: (selectedId) {
-              if (selectedId == null) return;
-              final drink = SampleMenu.breakfastDrinkAddOns.firstWhere(
-                (d) => d.id == selectedId,
-              );
-              orderProvider.addToCart(drink);
-            },
-          ),
-        ],
-      ),
     );
   }
 }
