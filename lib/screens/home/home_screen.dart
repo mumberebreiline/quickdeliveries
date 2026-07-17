@@ -9,9 +9,9 @@ class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
 
   final List<String> images = [
-    "assets/images/beef-stew-30.jpg",
-    "assets/images/Screenshot_2026-07-12-20-12-22-13.jpg",
-    "assets/images/Screenshot_2026-07-12-20-14-18-85.jpg",
+    "assets/images/home2.jpg",
+    "assets/images/home3.jpg",
+    "assets/images/home1.jpg",
   ];
 
   @override
