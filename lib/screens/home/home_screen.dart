@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import '../order/menu_screen.dart';
+import 'about_us_screen.dart';
+import 'feedback_screen.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
 
   final List<String> images = [
-    "assets/images/food1.jpg",
-    "assets/images/food2.jpg",
-    "assets/images/food3.jpg",
+    "assets/images/home2.jpg",
+    "assets/images/home3.jpg",
+    "assets/images/home1.jpg",
   ];
 
   @override
@@ -37,7 +40,7 @@ class HomeScreen extends StatelessWidget {
           // Dark transparent layer
 
           Container(
-            color: Colors.black.withOpacity(0.45),
+            color: Colors.black.withValues(alpha: 0.45),
           ),
 
           SafeArea(
@@ -54,15 +57,51 @@ class HomeScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Image.asset(
-                        "assets/images/logo.png",
+                        "assets/images/logo.jpg",
                         height: 55,
                       ),
                       Row(
                         children: [
-                          navItem("Menu"),
-                          navItem("Locations"),
-                          navItem("Feedback"),
-                          navItem("About Us"),
+                          navItem(
+                            context,
+                            "Menu",
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const MenuScreen(),
+                              ),
+                            ),
+                          ),
+                          navItem(
+                            context,
+                            "Login",
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => LoginScreen(),
+                              ),
+                            ),
+                          ),
+                          navItem(
+                            context,
+                            "About Us",
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AboutUsScreen(),
+                              ),
+                            ),
+                          ),
+                          navItem(
+                            context,
+                            "Feedback",
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const FeedbackScreen(),
+                              ),
+                            ),
+                          ),
                         ],
                       )
                     ],
@@ -90,9 +129,9 @@ class HomeScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const MenuScreen(),
+                        builder: (context) => MenuScreen()//MealCategoryScreen(),
                       ),
-                    ); // Navigate to menu page later
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,
@@ -123,14 +162,18 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget navItem(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
+  Widget navItem(BuildContext context, String title, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+          ),
         ),
       ),
     );
