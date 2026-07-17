@@ -47,18 +47,18 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
     return [
       {
         "title": "Breakfast",
-        "image": "assets/images/images (77).jpeg",
+        "image": "assets/images/menu1.jpeg",
         "screen": const BreakfastScreen(),
       },
       {
         "title": "Lunch",
-        "image": "assets/images/Screenshot_2026-07-12-20-14-18-85.jpg",
+        "image": "assets/images/home1.jpg",
         "screen": const LunchScreen(),
       },
       {
         "title": "Supper",
         "image":
-            "assets/images/pngtree-jollof-rice-plate-west-african-spicy-tomato-dish-image_17438884.jpg",
+            "assets/images/menu2.jpg",
         "screen": const SupperScreen(),
       },
       {
