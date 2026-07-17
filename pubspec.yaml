@@ -37,7 +37,9 @@ dependencies:
   # ==========================
   # Google Maps & Location
   # ==========================
-  google_maps_flutter: ^2.12.3
+  
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
   geolocator: ^14.0.2
   geocoding: ^5.0.0
 
@@ -76,6 +78,9 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/images/Breakfast/
+    - assets/images/Lunch/
+    - assets/images/Drinks/
 
   # Uncomment after adding your fonts
   #
