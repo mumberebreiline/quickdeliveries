@@ -1,130 +1,277 @@
-/*
 import 'package:flutter/material.dart';
-import '../home/meat_sauce_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+import '../../models/location.dart';
+import '../../providers/order_provider.dart';
+import '../../utils/constants.dart';
+import '../../utils/helpers.dart';
+import '../../utils/validators.dart';
+import '../../widgets/custom_button.dart';
+import '../../widgets/quantity_selector.dart';
+import 'order_status_screen.dart';
 
-class OrderFinalizeScreen extends StatelessWidget {
-  final SauceItem selectedItem;
+/// Where the customer reviews their cart and tells the vendor exactly where
+/// and when they want the food — the two pieces of information the route
+/// optimizer needs most.
+class OrderScreen extends StatefulWidget {
+  const OrderScreen({super.key});
 
-  const OrderFinalizeScreen({required this.selectedItem, super.key});
+  @override
+  State<OrderScreen> createState() => _OrderScreenState();
+}
+
+class _OrderScreenState extends State<OrderScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _notesController = TextEditingController();
+
+  Location? _selectedBuilding;
+  TimeOfDay? _selectedTime;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickTime() async {
+    final now = TimeOfDay.now();
+    final picked = await showTimePicker(context: context, initialTime: now);
+    if (picked != null) setState(() => _selectedTime = picked);
+  }
+
+  Future<void> _submit(OrderProvider orderProvider) async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedBuilding == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose a delivery building')),
+      );
+      return;
+    }
+    if (_selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose a preferred time')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    final now = DateTime.now();
+    var preferredTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _selectedTime!.hour,
+      _selectedTime!.minute,
+    );
+    // If the picked time already passed today, assume they mean tomorrow.
+    if (preferredTime.isBefore(now)) {
+      preferredTime = preferredTime.add(const Duration(days: 1));
+    }
+
+    final orderId = orderProvider.checkout(
+      // If they signed in (optional), this order is tied to their real
+      // account — otherwise a fresh guest id, same as before.
+      customerId: FirebaseAuth.instance.currentUser?.uid ?? const Uuid().v4(),
+      customerName: _nameController.text.trim(),
+      customerPhone: _phoneController.text.trim(),
+      deliveryLocation: _selectedBuilding!,
+      preferredTime: preferredTime,
+      notes: _notesController.text.trim().isEmpty
+          ? null
+          : _notesController.text.trim(),
+      onError: (error) {
+        // The write failed in the background, after we've already
+        // navigated away. OrderStatusScreen's own timeout is the backstop
+        // that tells the customer something went wrong; this is just for
+        // your own debugging in the meantime.
+        debugPrint('Order save failed: $error');
+      },
+    );
+
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => OrderStatusScreen(orderId: orderId)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final orderProvider = context.watch<OrderProvider>();
+    final cart = orderProvider.cart.values.toList();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Finalize Order')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                selectedItem.imageUrl,
-                height: 250,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  height: 250,
-                  color: Colors.grey[200],
-                  child: const Icon(Icons.broken_image, size: 50, color: Colors.grey),
-                ),
+      appBar: AppBar(title: const Text('Your Order')),
+      body: cart.isEmpty
+          ? const Center(child: Text('Your cart is empty'))
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  ...cart.map(
+                    (line) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        title: Text(line.product.name),
+                        subtitle: Text(formatUgx(line.product.price)),
+                        trailing: QuantitySelector(
+                          quantity: line.quantity,
+                          onChanged: (q) =>
+                              orderProvider.updateQuantity(line.product.id, q),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (cart.any((line) => line.product.category == 'Breakfast'))
+                    _DrinkPairingDropdown(orderProvider: orderProvider),
+                  const Divider(height: 32),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        formatUgx(orderProvider.cartTotal),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(labelText: 'Your name'),
+                    validator: (v) => Validators.notEmpty(v, fieldName: 'Name'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone number',
+                    ),
+                    validator: Validators.phone,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<Location>(
+                    initialValue: _selectedBuilding,
+                    decoration: const InputDecoration(labelText: 'Deliver to'),
+                    items: CampusLocations.buildings
+                        .map(
+                          (b) =>
+                              DropdownMenuItem(value: b, child: Text(b.name)),
+                        )
+                        .toList(),
+                    onChanged: (b) => setState(() => _selectedBuilding = b),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      _selectedTime == null
+                          ? 'Choose preferred time'
+                          : 'Deliver around ${_selectedTime!.format(context)}',
+                    ),
+                    trailing: const Icon(Icons.access_time),
+                    onTap: _pickTime,
+                    tileColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes (optional)',
+                    ),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 24),
+                  CustomButton(
+                    label: 'Place Order',
+                    fullWidth: true,
+                    isLoading: _isSubmitting,
+                    onPressed: () => _submit(orderProvider),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              selectedItem.name,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              selectedItem.price,
-              style: const TextStyle(fontSize: 20, color: Colors.green, fontWeight: FontWeight.w500),
-            ),
-            const Spacer(),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${selectedItem.name} order added!')),
-                );
-              },
-              style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
-              child: const Text('Confirm Purchase', style: TextStyle(fontSize: 18)),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
-*/
 
-import 'package:flutter/material.dart';
-import '../../models/order_model.dart';
-import '../../services/order_service.dart';
+/// Shown whenever the cart has a Breakfast item in it — lets the customer
+/// pair a hot drink with their breakfast right here on the cart screen.
+/// Picking one just adds it as a normal cart line via OrderProvider, so
+/// the running total above updates immediately — no separate pricing
+/// logic needed, it's the same total the rest of the cart already uses.
+class _DrinkPairingDropdown extends StatelessWidget {
+  final OrderProvider orderProvider;
 
-// Displays the logged-in user's orders, fetched live from Firestore.
-class OrdersScreen extends StatelessWidget {
-  const OrdersScreen({super.key});
+  const _DrinkPairingDropdown({required this.orderProvider});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Orders'),
-        backgroundColor: Colors.orange,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(10),
       ),
-      // StreamBuilder listens to OrderService.streamMyOrders() and
-      // rebuilds this screen every time the data changes.
-      body: StreamBuilder<List<FoodOrder>>(
-        stream: OrderService.streamMyOrders(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Something went wrong: ${snapshot.error}'),
-            );
-          }
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final orders = snapshot.data ?? [];
-          if (orders.isEmpty) {
-            return const Center(child: Text('You have no orders yet'));
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: orders.length,
-            itemBuilder: (context, index) {
-              final order = orders[index];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                // ExpansionTile shows a summary, and opens up to reveal
-                // the individual food items when tapped.
-                child: ExpansionTile(
-                  title: Text(
-                    'Order #${order.id.substring(0, 6)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.local_cafe_outlined,
+            size: 18,
+            color: Colors.deepOrange,
+          ),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Add a drink with breakfast?',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+          DropdownButton<String>(
+            hint: const Text('Choose', style: TextStyle(fontSize: 13)),
+            underline: const SizedBox.shrink(),
+            items: SampleMenu.breakfastDrinkAddOns
+                .map(
+                  (drink) => DropdownMenuItem(
+                    value: drink.id,
+                    child: Text(
+                      '${drink.name} (${formatUgx(drink.price)})',
+                      style: const TextStyle(fontSize: 13),
+                    ),
                   ),
-                  subtitle: Text(
-                    '${order.status} • \$${order.total.toStringAsFixed(2)}',
-                  ),
-                  children: order.items.map((item) {
-                    return ListTile(
-                      title: Text(item.name),
-                      trailing: Text(
-                        'x${item.quantity}   \$${item.subtotal.toStringAsFixed(2)}',
-                      ),
-                    );
-                  }).toList(),
-                ),
+                )
+                .toList(),
+            onChanged: (selectedId) {
+              if (selectedId == null) return;
+              final drink = SampleMenu.breakfastDrinkAddOns.firstWhere(
+                (d) => d.id == selectedId,
               );
+              orderProvider.addToCart(drink);
             },
-          );
-        },
+          ),
+        ],
       ),
     );
   }
