@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
 // TODO: Import your target screens here
-import 'breakfast_screen.dart';
-import 'lunch_screen.dart';
-import 'supper_screen.dart';
+import 'breakfast_selection_screen.dart';
+//import 'lunch_screen.dart';
+//import 'supper_screen.dart';
 import '../home/popular_screen.dart';
 import '../home/login_screen.dart';
 import '../home/about_us_screen.dart';
 import '../home/feedback_screen.dart';
+import 'food_selection_screen.dart';
+import 'Vegetarian_meals_screen.dart';
+
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
 
@@ -58,8 +61,8 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
       {
         "title": "Supper",
         "image":
-            "assets/images/menu2.jpg",
-        "screen": const SupperScreen(),
+            "assets/images/pngtree-jollof-rice-plate-west-african-spicy-tomato-dish-image_17438884.jpg",
+        "screen": const FoodSelectionScreen(),
       },
       {
         "title": "Popular",
@@ -69,7 +72,7 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
       {
         "title": "Vegetarians",
         "image": "assets/images/Screenshot_2026-07-12-20-11-25-60.jpg",
-        "screen": const PopularScreen(),
+        "screen": const VegetarianMealsScreen(),
       },
       {
         "title": "Drinks",
