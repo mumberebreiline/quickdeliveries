@@ -26,14 +26,14 @@ import '../../services/cart_service.dart';
 // match what's used below, just update the keys in _mealFromDoc().
 // ============================================================
 
-class VegetarianMealsScreen extends StatelessWidget {
-  const VegetarianMealsScreen({super.key});
+class DrinksSelectionScreen extends StatelessWidget {
+  const DrinksSelectionScreen({super.key});
 
   // Points at: Categories/Breakfast/Meals
   Stream<QuerySnapshot> _mealsStream() {
     return FirebaseFirestore.instance
         .collection('Categories')
-        .doc('Vegetarians')
+        .doc('Drinks')
         .collection('Meals')
         .snapshots();
   }
@@ -57,7 +57,7 @@ class VegetarianMealsScreen extends StatelessWidget {
       name: pick(['Name', 'name'], 'Unnamed'),
       price: double.tryParse(priceString) ?? 0.0,
       imageUrl: pick(['Image', 'imageUrl', 'image'], ''),
-      category: 'Vegetarians',
+      category: 'Breakfast',
     );
   }
 
@@ -65,7 +65,7 @@ class VegetarianMealsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vegetarian Meals'),
+        title: const Text('Drinks'),
         backgroundColor: Colors.orange,
       ),
       // StreamBuilder listens to Firestore live — the screen updates
