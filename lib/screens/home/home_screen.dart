@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app/theme.dart';
 import '../../providers/order_provider.dart';
-import '../../utils/constants.dart';
+import '../../utils/constants.dart' hide AppColors;
 import '../../widgets/cart_bar.dart';
 import '../order/category_items_screen.dart';
 
@@ -55,7 +55,7 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ),
                       );
-                    }, childCount: MenuCategories.categories.length),
+                    }, childCount: AppConstants.categories.length),
                   ),
                 ),
               ],
@@ -102,7 +102,10 @@ class _CategoryTile extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.6),
+                    ],
                   ),
                 ),
               ),
