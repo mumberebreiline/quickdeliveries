@@ -33,7 +33,7 @@ class FoodSelectionScreen extends StatelessWidget {
   Stream<QuerySnapshot> _mealsStream() {
     return FirebaseFirestore.instance
         .collection('Categories')
-        .doc('Lunch')
+        .doc('main courses')
         .collection('Meals')
         .snapshots();
   }
@@ -57,7 +57,7 @@ class FoodSelectionScreen extends StatelessWidget {
       name: pick(['Name', 'name'], 'Unnamed'),
       price: double.tryParse(priceString) ?? 0.0,
       imageUrl: pick(['Image', 'imageUrl', 'image'], ''),
-      category: 'Breakfast',
+      category: 'main courses',
     );
   }
 
@@ -65,7 +65,7 @@ class FoodSelectionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Breakfast'),
+        title: const Text('Main Courses'),
         backgroundColor: Colors.orange,
       ),
       // StreamBuilder listens to Firestore live — the screen updates
