@@ -201,7 +201,7 @@ class _BreakfastCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '\UGX${food.price.toStringAsFixed(2)}',
+                  'UGX${food.price.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: Colors.orange,
                     fontWeight: FontWeight.bold,
