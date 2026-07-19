@@ -42,7 +42,13 @@ class FoodOrder {
   final List<OrderItem> items;
   final double total;
   final DateTime createdAt;
-  final String status;
+  final String status;final String customerName;
+  final String phoneNumber;
+
+  final double latitude;
+  final double longitude;
+
+  final String preferredDeliveryTime;
 
   FoodOrder({
     required this.id,
