@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'food_item.dart';
 import '../../services/cart_service.dart';
+import '../../services/cart_screen.dart';
 
-// Opens when the user taps a food's picture, name, or price on the
-// selection screen. Lets them pick a quantity (using + / - buttons,
-// or by typing a number directly) before adding it to the cart.
+// The STANDARD order screen — used by every category EXCEPT Main
+// Courses (Breakfast, Drinks, Popular, Vegetarian all import this).
+// No accompaniments dropdown here on purpose — only Main Courses has
+// one, via main_course_order_detail_screen.dart.
+//
+// Opens when the user taps a food's picture, name, or "ORDER NOW"
+// button on a selection screen. Lets them pick a quantity, then
+// either add it to the cart or place the order immediately.
 class OrderDetailScreen extends StatefulWidget {
   final FoodItem food;
 
@@ -17,6 +25,7 @@ class OrderDetailScreen extends StatefulWidget {
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
   int _quantity = 1;
   late final TextEditingController _quantityController;
+  bool _isPlacingOrder = false;
 
   @override
   void initState() {
@@ -30,8 +39,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     super.dispose();
   }
 
-  // Central place that updates the quantity, whether it came from
-  // the + button, the - button, or someone typing a number.
   void _updateQuantity(int newQuantity) {
     if (newQuantity < 1) newQuantity = 1; // never let it drop below 1
     setState(() {
@@ -48,12 +55,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   void _onTypedQuantity(String value) {
     final parsed = int.tryParse(value);
-    if (parsed != null) {
-      _updateQuantity(parsed);
-    }
+    if (parsed != null) _updateQuantity(parsed);
   }
 
-  void _confirmOrder() {
+  double get _total => widget.food.price * _quantity;
+
+  void _addToCart() {
     CartService.instance.addItem(widget.food, _quantity);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$_quantity x ${widget.food.name} added to cart')),
@@ -61,14 +68,77 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     Navigator.pop(context);
   }
 
+  Future<void> _makeOrder() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to place an order')),
+      );
+      return;
+    }
+
+    setState(() => _isPlacingOrder = true);
+
+    try {
+      await FirebaseFirestore.instance.collection('orders').add({
+        'userId': user.uid,
+        'items': [
+          {
+            'foodId': widget.food.id,
+            'name': widget.food.name,
+            'price': widget.food.price,
+            'quantity': _quantity,
+          },
+        ],
+        'total': _total,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order placed! The vendor will see it shortly.')),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not place order: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isPlacingOrder = false);
+    }
+  }
+
+  void _openCart(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CartScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final total = widget.food.price * _quantity;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Finalize Order'),
         backgroundColor: Colors.orange,
+        actions: [
+          ListenableBuilder(
+            listenable: CartService.instance,
+            builder: (context, _) {
+              final count = CartService.instance.itemCount;
+              return IconButton(
+                onPressed: () => _openCart(context),
+                icon: Badge(
+                  label: Text('$count'),
+                  isLabelVisible: count > 0,
+                  child: const Icon(Icons.shopping_cart),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
@@ -96,12 +166,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '\$${widget.food.price.toStringAsFixed(2)} each',
+              'UGX ${widget.food.price.toStringAsFixed(0)} each',
               style: const TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 24),
 
-            // The quantity stepper: minus button — typed number — plus button
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -117,10 +186,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     controller: _quantityController,
                     textAlign: TextAlign.center,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -139,32 +205,50 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
             const SizedBox(height: 24),
             Text(
-              'Total: \$${total.toStringAsFixed(2)}',
+              'Total: UGX ${_total.toStringAsFixed(0)}',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
 
             const Spacer(),
 
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _confirmOrder,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _isPlacingOrder ? null : _addToCart,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.orange),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                    child: const Text(
+                      'ADD TO CART',
+                      style: TextStyle(fontSize: 14, color: Colors.orange, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'ADD TO CART',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isPlacingOrder ? null : _makeOrder,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                    child: _isPlacingOrder
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text(
+                            'MAKE ORDER',
+                            style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
