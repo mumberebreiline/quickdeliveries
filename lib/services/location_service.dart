@@ -1,36 +1,33 @@
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
-
-  Future<Position> getCurrentLocation() async {
-
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
+  static Future<Position> getCurrentLocation() async {
+    // Is GPS even switched on at the OS level?
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      throw Exception("Location services are disabled.");
+      throw 'Location services are disabled. Please turn on location.';
     }
 
-    LocationPermission permission =
-        await Geolocator.checkPermission();
+    // What's our current permission status?
+    LocationPermission permission = await Geolocator.checkPermission();
 
     if (permission == LocationPermission.denied) {
-
+      // Not asked yet — this line is what triggers the system popup.
       permission = await Geolocator.requestPermission();
-
       if (permission == LocationPermission.denied) {
-        throw Exception("Location permission denied.");
+        throw 'Location permission was denied.';
       }
-
     }
 
     if (permission == LocationPermission.deniedForever) {
-      throw Exception("Location permission permanently denied.");
+      // User ticked "don't ask again" — requestPermission() won't even
+      // show a popup now, so we have to tell them to fix it manually.
+      throw 'Location permission is permanently denied. Enable it in settings.';
     }
 
+    // All checks passed — now actually read the coordinates.
     return await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     );
-
   }
-
 }
