@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import '../../screens/order/food_item.dart';
+import '../screens/order/food_item.dart';
 
 // One line in the cart: a food item + how many of it were ordered.
 class CartItem {
@@ -57,8 +57,7 @@ class CartService extends ChangeNotifier {
     notifyListeners();
   }
 
-  double get totalPrice =>
-      _items.fold(0.0, (sum, item) => sum + item.total);
+  double get totalPrice => _items.fold(0.0, (sum, item) => sum + item.total);
 
   // Empties the cart — call this right after an order has been
   // saved to the database, so old items don't linger around.
