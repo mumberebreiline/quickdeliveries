@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app/routes.dart';
 import '../../app/theme.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/order_provider.dart';
 
 class VendorDashboardScreen extends StatelessWidget {
   const VendorDashboardScreen({super.key});

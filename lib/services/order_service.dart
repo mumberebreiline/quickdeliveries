@@ -1,64 +1,60 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'cart_service.dart';
-import '../models/order_model.dart';
+import '../models/order.dart';
 
-// Handles talking to the "orders" collection in Firestore:
-// saving a new order, and fetching the logged-in user's past orders.
+/// All Firestore reads/writes for orders live here, so the rest of the app
+/// never talks to Firestore directly — it just calls plain Dart methods.
 class OrderService {
-  static final _ordersCollection =
-      FirebaseFirestore.instance.collection('orders');
+  final CollectionReference<Map<String, dynamic>> _ordersRef = FirebaseFirestore
+      .instance
+      .collection('orders');
 
-  // Takes whatever is currently in the cart, saves it as one order
-  // document, and empties the cart afterward.
-  static Future<void> placeOrder() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('You need to be logged in to place an order.');
-    }
+  /// The statuses that mean "the vendor still needs to act on this".
+  static const List<OrderStatus> _activeStatuses = [
+    OrderStatus.pending,
+    OrderStatus.confirmed,
+    OrderStatus.preparing,
+    OrderStatus.outForDelivery,
+  ];
 
-    final cartItems = CartService.instance.items;
-    if (cartItems.isEmpty) {
-      throw Exception('Your cart is empty.');
-    }
-
-    await _ordersCollection.add({
-      // "userId" matters here — it's what your Firestore security
-      // rules check to make sure people can only see their own orders.
-      'userId': user.uid,
-      'items': cartItems
-          .map((item) => OrderItem(
-                foodId: item.food.id,
-                name: item.food.name,
-                price: item.food.price,
-                quantity: item.quantity,
-              ).toMap())
-          .toList(),
-      'total': CartService.instance.totalPrice,
-      'status': 'pending',
-      // FieldValue.serverTimestamp() lets Firestore stamp the exact
-      // time it received the order, instead of trusting the phone's clock.
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    CartService.instance.clear();
+  Future<void> submitOrder(String orderId, FoodOrder order) {
+    return _ordersRef.doc(orderId).set(order.toMap());
   }
 
-  // A LIVE list of the logged-in user's orders, newest first.
-  // Because this is a Stream, the orders screen updates automatically
-  // the moment something changes in the database — no manual refresh.
-  static Stream<List<FoodOrder>> streamMyOrders() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return const Stream.empty();
-    }
+  /// Live stream of every order the vendor still needs to prepare/deliver —
+  /// this is the feed the route optimizer consumes.
+  Stream<List<FoodOrder>> streamActiveOrders() {
+    return _ordersRef
+        .where('status', whereIn: _activeStatuses.map((s) => s.name).toList())
+        .orderBy('preferredTime')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => FoodOrder.fromMap(doc.data(), doc.id))
+              .toList(),
+        );
+  }
 
-    return _ordersCollection
-        .where('userId', isEqualTo: user.uid)
+  Stream<List<FoodOrder>> streamDeliveredOrders() {
+    return _ordersRef
+        .where('status', isEqualTo: OrderStatus.delivered.name)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => FoodOrder.fromFirestore(doc.id, doc.data()))
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => FoodOrder.fromMap(doc.data(), doc.id))
+              .toList(),
+        );
+  }
+
+  /// Lets a customer track a single order after checkout.
+  Stream<FoodOrder?> streamOrderById(String orderId) {
+    return _ordersRef.doc(orderId).snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) return null;
+      return FoodOrder.fromMap(doc.data()!, doc.id);
+    });
+  }
+
+  Future<void> updateStatus(String orderId, OrderStatus status) {
+    return _ordersRef.doc(orderId).update({'status': status.name});
   }
 }

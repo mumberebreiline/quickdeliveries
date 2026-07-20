@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.12.0
+  sdk: ">=3.9.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -37,32 +37,39 @@ dependencies:
   # ==========================
   # Google Maps & Location
   # ==========================
-  google_maps_flutter: ^2.12.3
+  
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
   geolocator: ^14.0.2
   geocoding: ^5.0.0
+
+
+connectivity_plus: ^7.0.0
+shared_preferences: ^2.5.3
+flutter_secure_storage: ^9.2.4
 
   # ==========================
   # Networking
   # ==========================
-  http: ^1.5.0
+http: ^1.5.0
 
   # ==========================
   # Images
   # ==========================
-  cached_network_image: ^3.4.1
-  image_picker: ^1.2.0
+cached_network_image: ^3.4.1
+image_picker: ^1.2.0
 
   # ==========================
   # Utilities
   # ==========================
-  intl: ^0.20.2
-  uuid: ^4.5.1
+intl: ^0.20.2
+uuid: ^4.5.1
 
   # ==========================
   # UI
   # ==========================
-  flutter_svg: ^2.2.0
-  flutter_rating_bar: ^4.0.1
+flutter_svg: ^2.2.0
+flutter_rating_bar: ^4.0.1
 
 dev_dependencies:
   flutter_test:

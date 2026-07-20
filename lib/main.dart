@@ -15,8 +15,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: 'Quick Deliveries',
       debugShowCheckedModeBanner: false,
-      home: HomeScreen(),
+      theme: ThemeData(colorSchemeSeed: Colors.green, useMaterial3: true),
+      home: const HomeScreen(),
     );
   }
 }
