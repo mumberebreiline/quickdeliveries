@@ -36,7 +36,7 @@ class SplashScreen extends StatelessWidget {
           ),
 
           // Dark transparent layer so text/icons stay readable over any photo
-          Container(color: Colors.black.withOpacity(0.45)),
+          Container(color: Colors.black.withValues(alpha: 0.45)),
 
           SafeArea(
             child: Column(
@@ -158,7 +158,7 @@ class _CornerIconButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.15),
+            color: Colors.white.withValues(alpha: 0.15),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: Colors.white, size: 20),

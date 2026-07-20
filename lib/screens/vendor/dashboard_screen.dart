@@ -133,7 +133,7 @@ class _DashboardTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: AppTheme.accentOrange.withOpacity(0.15),
+          backgroundColor: AppTheme.accentOrange.withValues(alpha: 0.15),
           child: Icon(icon, color: AppTheme.accentOrange),
         ),
         title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),

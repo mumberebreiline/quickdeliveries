@@ -4,55 +4,127 @@ import 'food_item.dart';
 import 'order_detail_screen.dart';
 import '../../services/cart_service.dart';
 
-// Shows a scrollable list of food items pulled live from Firestore.
-// Pass a "category" (like "Breakfast") to only show that category's
-// foods, or leave it null to show everything in the "foods" collection.
+// ============================================================
+// 📂 YOUR ACTUAL FIRESTORE STRUCTURE (from the console screenshot)
+// ============================================================
+//   Categories (collection)
+//     └─ Breakfast (document)     ← has fields: Description, Image,
+//                                    Name, Order, isActive
+//          └─ Meals (subcollection)  ← the actual food items live here
+//
+// This is different from a flat "foods" collection with a
+// "category" field — the meals are nested INSIDE the Breakfast
+// document. That's why the earlier version wasn't finding anything:
+// it was looking in the wrong place.
+//
+// IMPORTANT: your Category document (Breakfast) uses capitalized
+// field names — Name, Image, Description. Your Meal documents
+// inside "Meals" are very likely capitalized the same way (e.g.
+// Name, Price, Image) rather than lowercase (name, price, image).
+// Open one document inside Categories → Breakfast → Meals in the
+// Firebase console and check the exact field names — if they don't
+// match what's used below, just update the keys in _mealFromDoc().
+// ============================================================
+
 class VegetarianMealsScreen extends StatelessWidget {
-  final String? category;
+  const VegetarianMealsScreen({super.key});
 
-  const VegetarianMealsScreen({super.key, this.category});
+  // Points at: Categories/Breakfast/Meals
+  Stream<QuerySnapshot> _mealsStream() {
+    return FirebaseFirestore.instance
+        .collection('Categories')
+        .doc('Vegetarians')
+        .collection('Meals')
+        .snapshots();
+  }
 
-  // Builds the Firestore query. If a category was passed in, only
-  // fetch foods that match it; otherwise fetch the whole collection.
-  Stream<QuerySnapshot> _foodStream() {
-    final collection = FirebaseFirestore.instance.collection('foods');
-    if (category != null) {
-      return collection.where('category', isEqualTo: category).snapshots();
+  // Turns one "Meals" document into a FoodItem. Checks a capitalized
+  // field name first (matching your Categories documents), then
+  // falls back to a lowercase version, so this works either way.
+  FoodItem _mealFromDoc(String id, Map<String, dynamic> data) {
+    String pick(List<String> keys, String fallback) {
+      for (final key in keys) {
+        final value = data[key];
+        if (value != null) return value.toString();
+      }
+      return fallback;
     }
-    return collection.snapshots();
+
+    final priceString = pick(['Price', 'price'], '0');
+
+    return FoodItem(
+      id: id,
+      name: pick(['Name', 'name'], 'Unnamed'),
+      price: double.tryParse(priceString) ?? 0.0,
+      imageUrl: pick(['Image', 'imageUrl', 'image'], ''),
+      category: 'Vegetarians',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(category ?? 'Vegetarian Meals'),
+        title: const Text('Vegetarian Meals'),
         backgroundColor: Colors.orange,
       ),
-      // StreamBuilder rebuilds this screen automatically whenever the
-      // data in Firestore changes — no manual refresh needed.
+      // StreamBuilder listens to Firestore live — the screen updates
+      // automatically the moment data changes, with no manual refresh.
       body: StreamBuilder<QuerySnapshot>(
-        stream: _foodStream(),
+        stream: _mealsStream(),
         builder: (context, snapshot) {
+          // Something went wrong talking to Firestore (e.g. security
+          // rules blocked the read, or there's no internet).
           if (snapshot.hasError) {
-            return Center(child: Text('Something went wrong: ${snapshot.error}'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Could not load breakfast items:\n${snapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
           }
+
+          // Still waiting on the first response from Firestore.
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final docs = snapshot.data?.docs ?? [];
+
+          // The connection worked, but the "Meals" subcollection under
+          // the "Breakfast" document is empty — add documents there,
+          // not to a top-level "foods" collection.
           if (docs.isEmpty) {
-            return const Center(child: Text('No meals found'));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'No breakfast items found.\n\n'
+                  'Add documents inside:\n'
+                  'Categories → Breakfast → Meals',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
           }
 
-          return ListView.builder(
+          // GridView.builder arranges the cards 2 per row.
+          return GridView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: docs.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2, // 👈 2 items per row
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 0.68, // taller cards so there's room for buttons
+            ),
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
-              final food = FoodItem.fromFirestore(docs[index].id, data);
-              return FoodListCard(food: food);
+              final food = _mealFromDoc(docs[index].id, data);
+              return _BreakfastCard(food: food);
             },
           );
         },
@@ -61,14 +133,15 @@ class VegetarianMealsScreen extends StatelessWidget {
   }
 }
 
-// One card in the list: picture + name + price (all tappable to open
-// the order/finalize screen) plus an "Add to Cart" button underneath.
-class FoodListCard extends StatelessWidget {
+// One card in the grid: picture, name, price, an "Order Now" button
+// that opens the final order screen, and a smaller "Add to Cart"
+// button for a quick 1-item add without leaving this page.
+class _BreakfastCard extends StatelessWidget {
   final FoodItem food;
 
-  const FoodListCard({super.key, required this.food});
+  const _BreakfastCard({required this.food});
 
-  void _openOrderDetails(BuildContext context) {
+  void _openOrderScreen(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => OrderDetailScreen(food: food)),
@@ -78,102 +151,121 @@ class FoodListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            // Tapping the picture, name, or price opens the order screen.
-            GestureDetector(
-              onTap: () => _openOrderDetails(context),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      food.imageUrl,
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                      // Shows a placeholder if the picture link is broken
-                      // or hasn't been added yet.
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        width: 80,
-                        height: 80,
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.fastfood),
-                      ),
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const SizedBox(
-                          width: 80,
-                          height: 80,
-                          child: Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          food.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '\$${food.price.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Quick "Add to Cart" — adds 1 of this item straight away.
-            // For choosing a different quantity, the user taps the
-            // picture/name/price above to go to the order screen instead.
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  CartService.instance.addItem(food, 1);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${food.name} added to cart')),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Tapping the picture also opens the order screen.
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _openOrderScreen(context),
+              child: Image.network(
+                food.imageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                // Shows a placeholder if the picture link is broken
+                // or hasn't been added yet.
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: Colors.grey[300],
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.fastfood, size: 40),
+                ),
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   );
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Tapping the name also opens the order screen.
+                GestureDetector(
+                  onTap: () => _openOrderScreen(context),
+                  child: Text(
+                    food.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'ADD TO CART',
-                  style: TextStyle(
-                    color: Colors.white,
+                const SizedBox(height: 2),
+                Text(
+                  '\UGX${food.price.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: Colors.orange,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-              ),
+                const SizedBox(height: 8),
+
+                // 🟧 The "active order" button — takes the user straight
+                // to the final order screen where they set the quantity.
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _openOrderScreen(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: const Text(
+                      'ORDER NOW',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Quick "Add to Cart" — adds 1 of this item straight
+                // away, without opening the order screen.
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      CartService.instance.addItem(food, 1);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${food.name} added to cart')),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.orange),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: const Text(
+                      'ADD TO CART',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

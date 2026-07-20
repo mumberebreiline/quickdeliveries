@@ -26,14 +26,14 @@ import '../../services/cart_service.dart';
 // match what's used below, just update the keys in _mealFromDoc().
 // ============================================================
 
-class BreakfastSelectionScreen extends StatelessWidget {
-  const BreakfastSelectionScreen({super.key});
+class DrinksSelectionScreen extends StatelessWidget {
+  const DrinksSelectionScreen({super.key});
 
   // Points at: Categories/Breakfast/Meals
   Stream<QuerySnapshot> _mealsStream() {
     return FirebaseFirestore.instance
         .collection('Categories')
-        .doc('Breakfast')
+        .doc('Drinks')
         .collection('Meals')
         .snapshots();
   }
@@ -65,7 +65,7 @@ class BreakfastSelectionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Breakfast'),
+        title: const Text('Drinks'),
         backgroundColor: Colors.orange,
       ),
       // StreamBuilder listens to Firestore live — the screen updates
@@ -119,8 +119,7 @@ class BreakfastSelectionScreen extends StatelessWidget {
               crossAxisCount: 2, // 👈 2 items per row
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio:
-                  0.68, // taller cards so there's room for buttons
+              childAspectRatio: 0.68, // taller cards so there's room for buttons
             ),
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
@@ -202,7 +201,7 @@ class _BreakfastCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'UGX${food.price.toStringAsFixed(2)}',
+                  '\UGX${food.price.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: Colors.orange,
                     fontWeight: FontWeight.bold,

@@ -43,6 +43,8 @@ class _OrderScreenState extends State<OrderScreen> {
     final picked = await showTimePicker(context: context, initialTime: now);
     if (picked != null) setState(() => _selectedTime = picked);
   }
+import '../../models/order_model.dart';
+import '../../services/order_service.dart';
 
   Future<void> _submit(OrderProvider orderProvider) async {
     if (!_formKey.currentState!.validate()) return;

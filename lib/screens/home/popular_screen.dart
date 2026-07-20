@@ -64,10 +64,11 @@ class PopularScreen extends StatelessWidget {
 }
 */
 
-
 import 'package:flutter/material.dart';
+
 class PopularScreen extends StatelessWidget {
   const PopularScreen({super.key});
   @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Popular Menu')));
+  Widget build(BuildContext context) =>
+      Scaffold(appBar: AppBar(title: const Text('Popular Menu')));
 }
