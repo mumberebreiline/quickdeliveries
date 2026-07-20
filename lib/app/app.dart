@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-
 import 'routes.dart';
+import 'theme.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -10,10 +10,7 @@ class App extends StatelessWidget {
     return MaterialApp(
       title: 'Quick Deliveries',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.themeData,
       initialRoute: AppRoutes.splash,
       routes: appRoutes,
     );

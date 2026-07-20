@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'food_item.dart';
 import '../../services/cart_service.dart';
 import '../../services/cart_screen.dart';
+import '../../services/auth_service.dart';
 
 // ============================================================
 // 🍛 MAIN COURSES ONLY
@@ -32,10 +33,12 @@ class MainCourseOrderDetailScreen extends StatefulWidget {
   const MainCourseOrderDetailScreen({super.key, required this.food});
 
   @override
-  State<MainCourseOrderDetailScreen> createState() => _MainCourseOrderDetailScreenState();
+  State<MainCourseOrderDetailScreen> createState() =>
+      _MainCourseOrderDetailScreenState();
 }
 
-class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScreen> {
+class _MainCourseOrderDetailScreenState
+    extends State<MainCourseOrderDetailScreen> {
   int _quantity = 1;
   late final TextEditingController _quantityController;
 
@@ -84,7 +87,11 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
         .snapshots();
   }
 
-  dynamic _pick(Map<String, dynamic> data, List<String> keys, dynamic fallback) {
+  dynamic _pick(
+    Map<String, dynamic> data,
+    List<String> keys,
+    dynamic fallback,
+  ) {
     for (final key in keys) {
       final value = data[key];
       if (value != null) return value;
@@ -108,9 +115,15 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
     return raw.toString().toLowerCase() == 'true';
   }
 
-  bool _isSelected(String id) => _selectedAccompaniments.any((item) => item['id'] == id);
+  bool _isSelected(String id) =>
+      _selectedAccompaniments.any((item) => item['id'] == id);
 
-  void _toggleAccompaniment(String id, String name, double price, bool checked) {
+  void _toggleAccompaniment(
+    String id,
+    String name,
+    double price,
+    bool checked,
+  ) {
     setState(() {
       if (checked) {
         _selectedAccompaniments.add({'id': id, 'name': name, 'price': price});
@@ -120,8 +133,10 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
     });
   }
 
-  double get _accompanimentsTotal =>
-      _selectedAccompaniments.fold(0.0, (sum, item) => sum + (item['price'] as double));
+  double get _accompanimentsTotal => _selectedAccompaniments.fold(
+    0.0,
+    (sum, item) => sum + (item['price'] as double),
+  );
 
   double get _total => (widget.food.price * _quantity) + _accompanimentsTotal;
 
@@ -136,10 +151,21 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
   }
 
   Future<void> _makeOrder() async {
-    final user = FirebaseAuth.instance.currentUser;
+    // main.dart already ensures someone's signed in (anonymously, if
+    // they never logged in) before this screen is even reachable — this
+    // is just a safety net in case that somehow didn't happen.
+    var user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      await AuthService().ensureSignedIn();
+      user = FirebaseAuth.instance.currentUser;
+    }
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please log in to place an order')),
+        const SnackBar(
+          content: Text(
+            'Could not start a session — check your connection and try again',
+          ),
+        ),
       );
       return;
     }
@@ -167,21 +193,26 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order placed! The vendor will see it shortly.')),
+        const SnackBar(
+          content: Text('Order placed! The vendor will see it shortly.'),
+        ),
       );
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not place order: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not place order: $e')));
     } finally {
       if (mounted) setState(() => _isPlacingOrder = false);
     }
   }
 
   void _openCart(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const CartScreen()));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CartScreen()),
+    );
   }
 
   @override
@@ -253,7 +284,10 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                     controller: _quantityController,
                     textAlign: TextAlign.center,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -279,10 +313,18 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                data: Theme.of(
+                  context,
+                ).copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
-                  title: const Text('Add Accompaniments', style: TextStyle(fontWeight: FontWeight.bold)),
-                  leading: const Icon(Icons.restaurant_menu, color: Colors.orange),
+                  title: const Text(
+                    'Add Accompaniments',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  leading: const Icon(
+                    Icons.restaurant_menu,
+                    color: Colors.orange,
+                  ),
                   children: [
                     StreamBuilder<QuerySnapshot>(
                       stream: _accompanimentsStream(),
@@ -290,10 +332,13 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                         if (snapshot.hasError) {
                           return Padding(
                             padding: const EdgeInsets.all(16),
-                            child: Text('Could not load accompaniments: ${snapshot.error}'),
+                            child: Text(
+                              'Could not load accompaniments: ${snapshot.error}',
+                            ),
                           );
                         }
-                        if (snapshot.connectionState == ConnectionState.waiting) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return const Padding(
                             padding: EdgeInsets.all(16),
                             child: CircularProgressIndicator(strokeWidth: 2),
@@ -316,7 +361,10 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                         return Column(
                           children: availableDocs.map((doc) {
                             final data = doc.data() as Map<String, dynamic>;
-                            final name = _pick(data, ['name', 'Name'], 'Unnamed').toString();
+                            final name = _pick(data, [
+                              'name',
+                              'Name',
+                            ], 'Unnamed').toString();
                             final price = _readPrice(data);
 
                             return CheckboxListTile(
@@ -324,10 +372,19 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                               title: Text(name),
                               // Shows "Free" instead of "UGX 0" for
                               // accompaniments with no price, like white rice.
-                              subtitle: Text(price > 0 ? 'UGX ${price.toStringAsFixed(0)}' : 'Free'),
+                              subtitle: Text(
+                                price > 0
+                                    ? 'UGX ${price.toStringAsFixed(0)}'
+                                    : 'Free',
+                              ),
                               activeColor: Colors.orange,
                               onChanged: (checked) {
-                                _toggleAccompaniment(doc.id, name, price, checked ?? false);
+                                _toggleAccompaniment(
+                                  doc.id,
+                                  name,
+                                  price,
+                                  checked ?? false,
+                                );
                               },
                             );
                           }).toList(),
@@ -375,11 +432,17 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.orange),
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                     ),
                     child: const Text(
                       'ADD TO CART',
-                      style: TextStyle(fontSize: 14, color: Colors.orange, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -390,17 +453,26 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                     ),
                     child: _isPlacingOrder
                         ? const SizedBox(
                             height: 18,
                             width: 18,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
                           )
                         : const Text(
                             'MAKE ORDER',
-                            style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                   ),
                 ),

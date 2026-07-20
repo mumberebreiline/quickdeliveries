@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'food_item.dart';
 import '../../services/cart_service.dart';
 import '../../services/cart_screen.dart';
+import '../../services/auth_service.dart';
 
 // The STANDARD order screen — used by every category EXCEPT Main
 // Courses (Breakfast, Drinks, Popular, Vegetarian all import this).
@@ -69,10 +70,21 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   Future<void> _makeOrder() async {
-    final user = FirebaseAuth.instance.currentUser;
+    // main.dart already ensures someone's signed in (anonymously, if
+    // they never logged in) before this screen is even reachable — this
+    // is just a safety net in case that somehow didn't happen.
+    var user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      await AuthService().ensureSignedIn();
+      user = FirebaseAuth.instance.currentUser;
+    }
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please log in to place an order')),
+        const SnackBar(
+          content: Text(
+            'Could not start a session — check your connection and try again',
+          ),
+        ),
       );
       return;
     }
@@ -97,14 +109,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order placed! The vendor will see it shortly.')),
+        const SnackBar(
+          content: Text('Order placed! The vendor will see it shortly.'),
+        ),
       );
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not place order: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not place order: $e')));
     } finally {
       if (mounted) setState(() => _isPlacingOrder = false);
     }
@@ -186,7 +200,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     controller: _quantityController,
                     textAlign: TextAlign.center,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -219,11 +236,17 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.orange),
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                     ),
                     child: const Text(
                       'ADD TO CART',
-                      style: TextStyle(fontSize: 14, color: Colors.orange, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -234,17 +257,26 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                     ),
                     child: _isPlacingOrder
                         ? const SizedBox(
                             height: 18,
                             width: 18,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
                           )
                         : const Text(
                             'MAKE ORDER',
-                            style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                   ),
                 ),
