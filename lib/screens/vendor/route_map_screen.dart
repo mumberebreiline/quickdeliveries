@@ -6,6 +6,9 @@ import '../../providers/order_provider.dart';
 import '../../services/maps_service.dart';
 import '../../services/route_optimizer_service.dart';
 import '../../utils/helpers.dart';
+import '../../services/osrm_service.dart';
+import 'package:latlong2/latlong.dart';
+import '../../models/location.dart';
 
 class RouteMapScreen extends StatefulWidget {
   const RouteMapScreen({super.key});
@@ -18,6 +21,8 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   RoutePlan? _plan;
   bool _isLoading = false;
   String? _error;
+  Map<int, Polyline> _roadPolylines = {}; // real road path per time-window, keyed by index
+  final OsrmService _osrmService = OsrmService();
   OrderProvider? _orderProvider;
 
   @override
@@ -78,12 +83,49 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         _plan = plan;
         _isLoading = false;
       });
+      _loadRoadPolylines(plan, locationProvider.currentLocation);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadRoadPolylines(RoutePlan plan, Location vendorStart) async {
+    Location current = vendorStart;
+    var windowIndex = 0;
+
+    for (final window in plan.windows) {
+      if (window.stops.isEmpty) {
+        windowIndex++;
+        continue;
+      }
+
+      final stops = [current, ...window.stops.map((s) => s.order.deliveryLocation)];
+
+      try {
+        final road = await _osrmService.getRoute(stops);
+        if (!mounted) return;
+        setState(() {
+          _roadPolylines = {
+            ..._roadPolylines,
+            windowIndex: Polyline(
+              points: road.points,
+              color: MapsService.colorForWindow(windowIndex),
+              strokeWidth: 4,
+            ),
+          };
+        });
+      } catch (_) {
+        // OSRM failed for this one window — leave it out of
+        // _roadPolylines, so the straight-line fallback keeps showing
+        // for just that window instead of breaking the whole map.
+      }
+
+      current = window.stops.last.order.deliveryLocation;
+      windowIndex++;
     }
   }
 
@@ -165,13 +207,19 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                       userAgentPackageName: 'com.example.quickdeliveries',
                     ),
                     PolylineLayer(
-                      polylines: MapsService.buildPolylines(
-                        plan,
-                        vendorLocation,
-                      ),
+                      polylines: [
+                        for (var i = 0; i < plan.windows.length; i++)
+                          _roadPolylines[i] ??
+                              MapsService.buildPolylines(plan, vendorLocation)[i],
+                      ],
                     ),
                     MarkerLayer(
                       markers: MapsService.buildMarkers(plan, vendorLocation),
+                    ),
+                    RichAttributionWidget(
+                      attributions: [
+                        TextSourceAttribution('OpenStreetMap contributors'),
+                      ],
                     ),
                   ],
                 ),

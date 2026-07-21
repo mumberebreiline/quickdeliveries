@@ -18,7 +18,9 @@ class MapsService {
     Color(0xFF1565C0),
     Color(0xFF6A1B9A),
     Color(0xFFC62828),
+   
   ];
+  static Color colorForWindow(int index) => _windowColors[index % _windowColors.length];
 
   static List<Marker> buildMarkers(RoutePlan plan, Location vendorStart) {
     final markers = <Marker>[
