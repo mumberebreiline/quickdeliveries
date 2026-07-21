@@ -93,10 +93,7 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
       default:
         screen = const MenuScreen();
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => screen),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
   }
 
   @override
@@ -174,7 +171,8 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: filteredCategories.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, // 👈 change this number for more/fewer columns
+                  crossAxisCount:
+                      2, // 👈 change this number for more/fewer columns
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
                   childAspectRatio: 0.95,
