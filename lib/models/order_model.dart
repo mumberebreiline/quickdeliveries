@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'location.dart';
 
 // One food line inside an order (name, price, quantity at the time
 // the order was placed — kept separate from FoodItem in case prices
@@ -19,11 +20,11 @@ class OrderItem {
   double get subtotal => price * quantity;
 
   Map<String, dynamic> toMap() => {
-        'foodId': foodId,
-        'name': name,
-        'price': price,
-        'quantity': quantity,
-      };
+    'foodId': foodId,
+    'name': name,
+    'price': price,
+    'quantity': quantity,
+  };
 
   factory OrderItem.fromMap(Map<String, dynamic> map) {
     return OrderItem(
@@ -35,14 +36,42 @@ class OrderItem {
   }
 }
 
+/// Order status values, as plain strings (matching how this project
+/// already writes 'pending' in OrderService) rather than an enum, so
+/// nothing that already reads order.status as a String needs to change.
+class OrderStatus {
+  static const pending = 'pending';
+  static const confirmed = 'confirmed';
+  static const preparing = 'preparing';
+  static const outForDelivery = 'outForDelivery';
+  static const delivered = 'delivered';
+  static const cancelled = 'cancelled';
+
+  /// Statuses that mean "the vendor still needs to act on this" — this is
+  /// the feed the route optimizer consumes.
+  static const active = [pending, confirmed, preparing, outForDelivery];
+}
+
 // One whole order document from Firestore, including all its items.
+//
+// customerName/customerPhone/deliveryLocation/preferredTime are new —
+// the original model only had userId, with no way to know *where* or
+// *when* to deliver. Those are exactly what the route optimizer needs,
+// so they're required going forward. Existing/older order documents that
+// predate this (if any) will fall back to the vendor's own base location
+// and "right now" — clearly wrong for routing, but keeps old data from
+// crashing the parser; new orders should always supply real values.
 class FoodOrder {
   final String id;
   final String userId;
+  final String customerName;
+  final String customerPhone;
   final List<OrderItem> items;
   final double total;
   final DateTime createdAt;
   final String status;
+  final Location deliveryLocation;
+  final DateTime preferredTime;
 
   FoodOrder({
     required this.id,
@@ -50,7 +79,11 @@ class FoodOrder {
     required this.items,
     required this.total,
     required this.createdAt,
-    this.status = 'pending',
+    required this.deliveryLocation,
+    required this.preferredTime,
+    this.customerName = '',
+    this.customerPhone = '',
+    this.status = OrderStatus.pending,
   });
 
   factory FoodOrder.fromFirestore(String id, Map<String, dynamic> data) {
@@ -62,12 +95,50 @@ class FoodOrder {
     return FoodOrder(
       id: id,
       userId: data['userId'] as String? ?? '',
+      customerName: data['customerName'] as String? ?? '',
+      customerPhone: data['customerPhone'] as String? ?? '',
       items: items,
       total: (data['total'] as num?)?.toDouble() ?? 0.0,
-      // Firestore stores dates as Timestamp — this converts it to a
-      // normal Dart DateTime so it's easy to work with.
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      status: data['status'] as String? ?? 'pending',
+      createdAt: _parseDate(data['createdAt']) ?? DateTime.now(),
+      status: data['status'] as String? ?? OrderStatus.pending,
+      deliveryLocation: data['deliveryLocation'] != null
+          ? Location.fromMap(data['deliveryLocation'] as Map<String, dynamic>)
+          : const Location(
+              id: 'unknown',
+              name: 'Unknown delivery point',
+              latitude: 0.33280,
+              longitude: 32.56750,
+            ),
+      preferredTime:
+          _parseDate(data['preferredTime']) ??
+          DateTime.now().add(const Duration(minutes: 30)),
     );
+  }
+
+  /// Firestore normally stores these as a real Timestamp, written via
+  /// FieldValue.serverTimestamp() or Timestamp.fromDate() — but a field
+  /// added by hand through the Firestore Console UI (picking "string"
+  /// instead of "timestamp" in the type dropdown, an easy mistake to
+  /// make while testing) ends up as plain ISO text instead. Rather than
+  /// crash on that, this accepts either shape.
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'userId': userId,
+      'customerName': customerName,
+      'customerPhone': customerPhone,
+      'items': items.map((i) => i.toMap()).toList(),
+      'total': total,
+      'status': status,
+      'createdAt': FieldValue.serverTimestamp(),
+      'deliveryLocation': deliveryLocation.toMap(),
+      'preferredTime': Timestamp.fromDate(preferredTime),
+    };
   }
 }

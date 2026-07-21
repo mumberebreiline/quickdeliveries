@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-
-// TODO: Import your target screens here
 import 'breakfast_selection_screen.dart';
-//import 'lunch_screen.dart';
-//import 'supper_screen.dart';
 import '../home/popular_screen.dart';
 import '../home/login_screen.dart';
 import '../home/about_us_screen.dart';
 import '../home/feedback_screen.dart';
 import 'food_selection_screen.dart';
-import 'Vegetarian_meals_screen.dart';
+import 'vegetarian_meals_screen.dart';
+import 'drinks.dart';
 
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
@@ -50,33 +47,27 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
     return [
       {
         "title": "Breakfast",
-        "image": "assets/images/images (77).jpeg",
+        "image": "assets/images/menu1.jpeg",
         "screen": const BreakfastSelectionScreen(),
       },
       {
-        "title": "Lunch",
-        "image": "assets/images/Screenshot_2026-07-12-20-14-18-85.jpg",
+        "title": "Main Courses",
+        "image": "assets/images/home1.jpg",
         "screen": const FoodSelectionScreen(),
       },
       {
-        "title": "Supper",
-        "image":
-            "assets/images/pngtree-jollof-rice-plate-west-african-spicy-tomato-dish-image_17438884.jpg",
-        "screen": const FoodSelectionScreen(),
-      },
-      {
-        "title": "Popular",
-        "image": "assets/images/menu4.jpg",
-        "screen": const PopularScreen(),
-      },
-      {
-        "title": "Vegetarians",
+        "title": "Vegetarian Special",
         "image": "assets/images/Screenshot_2026-07-12-20-11-25-60.jpg",
         "screen": const VegetarianMealsScreen(),
       },
       {
         "title": "Drinks",
-        "image": "assets/images/menu6.jpeg",
+        "image": "assets/images/images (35).jpeg",
+        "screen": const DrinksSelectionScreen(),
+      },
+      {
+        "title": "Popular",
+        "image": "assets/images/Screenshot_2026-07-12-20-17-18-33.jpg",
         "screen": const PopularScreen(),
       },
     ];
