@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:provider/provider.dart';
+import '../../models/location.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../services/maps_service.dart';
+import '../../services/osrm_service.dart';
 import '../../services/route_optimizer_service.dart';
 import '../../utils/helpers.dart';
-import '../../services/osrm_service.dart';
-import 'package:latlong2/latlong.dart';
-import '../../models/location.dart';
 
 class RouteMapScreen extends StatefulWidget {
   const RouteMapScreen({super.key});
@@ -21,9 +20,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   RoutePlan? _plan;
   bool _isLoading = false;
   String? _error;
-  Map<int, Polyline> _roadPolylines = {}; // real road path per time-window, keyed by index
-  final OsrmService _osrmService = OsrmService();
   OrderProvider? _orderProvider;
+
+  final OsrmService _osrmService = OsrmService();
+  // Real road-following lines, keyed by window index — filled in after
+  // the plan loads. A window with no entry here just shows the
+  // straight-line fallback instead (drawn by MapsService.buildPolylines).
+  Map<int, Polyline> _roadPolylines = {};
 
   @override
   void initState() {
@@ -73,6 +76,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _roadPolylines = {};
     });
     try {
       final plan = await orderProvider.buildRoutePlan(
@@ -93,6 +97,10 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     }
   }
 
+  /// Draws the actual road-following path for each batch, on top of the
+  /// straight-line fallback already showing. Runs after the plan itself
+  /// is on screen — the route doesn't need to wait on this, it's a
+  /// visual refinement that fills in as each window resolves.
   Future<void> _loadRoadPolylines(RoutePlan plan, Location vendorStart) async {
     Location current = vendorStart;
     var windowIndex = 0;
@@ -103,7 +111,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         continue;
       }
 
-      final stops = [current, ...window.stops.map((s) => s.order.deliveryLocation)];
+      final stops = [
+        current,
+        ...window.stops.map((s) => s.order.deliveryLocation),
+      ];
+      final capturedIndex = windowIndex;
 
       try {
         final road = await _osrmService.getRoute(stops);
@@ -111,9 +123,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         setState(() {
           _roadPolylines = {
             ..._roadPolylines,
-            windowIndex: Polyline(
+            capturedIndex: Polyline(
               points: road.points,
-              color: MapsService.colorForWindow(windowIndex),
+              color: MapsService.colorForWindow(capturedIndex),
               strokeWidth: 4,
             ),
           };
@@ -157,7 +169,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh conditions (weather, traffic, hazards)',
+            tooltip: 'Refresh conditions (weather, traffic)',
             onPressed: _loadPlan,
           ),
         ],
@@ -173,7 +185,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 12),
-                    Text('Checking weather, traffic, and hazards...'),
+                    Text('Checking weather and traffic...'),
                   ],
                 ),
               ),
@@ -190,7 +202,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
           final vendorLocation = locationProvider.currentLocation;
 
-          return Column(
+          return ListView(
             children: [
               _AdvisoryPanel(plan: plan),
               SizedBox(
@@ -208,18 +220,16 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                     ),
                     PolylineLayer(
                       polylines: [
-                        for (var i = 0; i < plan.windows.length; i++)
-                          _roadPolylines[i] ??
-                              MapsService.buildPolylines(plan, vendorLocation)[i],
+                        ...MapsService.buildPolylines(
+                          plan,
+                          vendorLocation,
+                          skipWindows: _roadPolylines.keys.toSet(),
+                        ),
+                        ..._roadPolylines.values,
                       ],
                     ),
                     MarkerLayer(
                       markers: MapsService.buildMarkers(plan, vendorLocation),
-                    ),
-                    RichAttributionWidget(
-                      attributions: [
-                        TextSourceAttribution('OpenStreetMap contributors'),
-                      ],
                     ),
                   ],
                 ),
@@ -245,10 +255,31 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                   ],
                 ),
               ),
+              if (plan.totalStops > 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      plan.stopsWithRealRoadData == plan.totalStops
+                          ? '✓ All distances from real road routes (OSRM)'
+                          : '${plan.stopsWithRealRoadData} of ${plan.totalStops} stops using real road '
+                                'routes — the rest are straight-line estimates',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: plan.stopsWithRealRoadData == plan.totalStops
+                            ? Colors.green.shade700
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
               const Divider(height: 1),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(12),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     for (final window in plan.windows) ...[
                       Padding(

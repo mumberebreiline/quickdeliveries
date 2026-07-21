@@ -1,26 +1,14 @@
 import 'package:flutter/foundation.dart';
 import '../screens/order/food_item.dart';
 
-// One line in the cart: a food item + how many of it were ordered +
-// any accompaniments (sides/extras) chosen for it.
-// Each accompaniment looks like: {"name": ..., "price": ...}
+// One line in the cart: a food item + how many of it were ordered.
 class CartItem {
   final FoodItem food;
   int quantity;
-  final List<Map<String, dynamic>> accompaniments;
 
-  CartItem({
-    required this.food,
-    required this.quantity,
-    this.accompaniments = const [],
-  });
+  CartItem({required this.food, required this.quantity});
 
-  double get accompanimentsTotal =>
-      accompaniments.fold(0.0, (sum, item) => sum + (item['price'] as num).toDouble());
-
-  // Accompaniments are per-portion, so they scale with quantity too —
-  // 2x "beef stew" with rice means 2 servings of rice as well.
-  double get total => (food.price + accompanimentsTotal) * quantity;
+  double get total => food.price * quantity;
 }
 
 // A simple shared cart that any screen in the app can add to, read
@@ -37,43 +25,22 @@ class CartService extends ChangeNotifier {
 
   int get itemCount => _items.fold(0, (sum, item) => sum + item.quantity);
 
-  // Two cart lines only merge (bump quantity) if they're the SAME
-  // food with the SAME accompaniments selected. A beef stew with rice
-  // and a beef stew with no sides stay as two separate lines, since
-  // they're different orders.
-  bool _sameAccompaniments(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
-    if (a.length != b.length) return false;
-    final namesA = a.map((item) => item['name']).toSet();
-    final namesB = b.map((item) => item['name']).toSet();
-    return namesA.length == namesB.length && namesA.containsAll(namesB);
-  }
-
-  void addItem(
-    FoodItem food,
-    int quantity, {
-    List<Map<String, dynamic>> accompaniments = const [],
-  }) {
-    final existingIndex = _items.indexWhere((item) =>
-        item.food.id == food.id && _sameAccompaniments(item.accompaniments, accompaniments));
+  void addItem(FoodItem food, int quantity) {
+    final existingIndex = _items.indexWhere((item) => item.food.id == food.id);
 
     if (existingIndex >= 0) {
-      // Already in the cart with the same accompaniments — just bump quantity
+      // Already in the cart — just bump up the quantity
       _items[existingIndex].quantity += quantity;
     } else {
-      _items.add(CartItem(food: food, quantity: quantity, accompaniments: accompaniments));
+      _items.add(CartItem(food: food, quantity: quantity));
     }
     notifyListeners();
   }
 
   // Changes a cart item's quantity directly (used by the +/- buttons
   // on the cart screen). Removes the item entirely if quantity hits 0.
-  //
-  // NOTE: takes the actual CartItem, not just a food ID — since the
-  // same food can now appear as two separate cart lines with
-  // different accompaniments, matching by ID alone could accidentally
-  // change the wrong line.
-  void updateQuantity(CartItem item, int quantity) {
-    final index = _items.indexOf(item);
+  void updateQuantity(String foodId, int quantity) {
+    final index = _items.indexWhere((item) => item.food.id == foodId);
     if (index < 0) return;
 
     if (quantity <= 0) {
@@ -84,9 +51,9 @@ class CartService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Removes one specific cart line completely, regardless of quantity.
-  void removeItem(CartItem item) {
-    _items.remove(item);
+  // Removes one item from the cart completely, regardless of quantity.
+  void removeItem(String foodId) {
+    _items.removeWhere((item) => item.food.id == foodId);
     notifyListeners();
   }
 

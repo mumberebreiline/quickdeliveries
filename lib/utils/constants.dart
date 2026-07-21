@@ -90,4 +90,31 @@ class CampusLocations {
     }
     return null;
   }
+
+  /// Turns a customer's raw captured GPS position into a friendly label
+  /// for the vendor's screens ("Near Mary Stuart Hall") while the actual
+  /// coordinates used for routing stay the precise captured ones — this
+  /// is purely cosmetic, it doesn't snap the delivery point itself to
+  /// the nearest building.
+  static String describeNearestBuilding(double latitude, double longitude) {
+    final point = Location(
+      id: '_probe',
+      name: '_probe',
+      latitude: latitude,
+      longitude: longitude,
+    );
+    Location? nearest;
+    double? minDistanceKm;
+    for (final building in buildings) {
+      final distance = point.distanceToKm(building);
+      if (minDistanceKm == null || distance < minDistanceKm) {
+        minDistanceKm = distance;
+        nearest = building;
+      }
+    }
+    if (nearest != null && minDistanceKm != null && minDistanceKm < 0.3) {
+      return 'Near ${nearest.name}';
+    }
+    return 'Customer\'s location';
+  }
 }

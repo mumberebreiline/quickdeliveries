@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'food_item.dart';
 import 'order_detail_screen.dart';
 import '../../services/cart_service.dart';
-import '../../services/cart_screen.dart';
+import 'cart_screen.dart';
 
 // ============================================================
 // 📂 YOUR ACTUAL FIRESTORE STRUCTURE (from the console screenshot)
@@ -63,7 +63,10 @@ class BreakfastSelectionScreen extends StatelessWidget {
   }
 
   void _openCart(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const CartScreen()));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CartScreen()),
+    );
   }
 
   @override
@@ -144,7 +147,8 @@ class BreakfastSelectionScreen extends StatelessWidget {
               crossAxisCount: 2, // 👈 2 items per row
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio: 0.68, // taller cards so there's room for buttons
+              childAspectRatio:
+                  0.68, // taller cards so there's room for buttons
             ),
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;

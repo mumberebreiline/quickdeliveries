@@ -18,9 +18,10 @@ class MapsService {
     Color(0xFF1565C0),
     Color(0xFF6A1B9A),
     Color(0xFFC62828),
-   
   ];
-  static Color colorForWindow(int index) => _windowColors[index % _windowColors.length];
+
+  static Color colorForWindow(int index) =>
+      _windowColors[index % _windowColors.length];
 
   static List<Marker> buildMarkers(RoutePlan plan, Location vendorStart) {
     final markers = <Marker>[
@@ -51,24 +52,14 @@ class MapsService {
       }
     }
 
-    for (final hazard in plan.conditions.activeHazards) {
-      markers.add(
-        Marker(
-          point: ll.LatLng(hazard.latitude, hazard.longitude),
-          width: 34,
-          height: 34,
-          child: const Icon(
-            Icons.warning_amber_rounded,
-            color: Colors.orange,
-            size: 28,
-          ),
-        ),
-      );
-    }
     return markers;
   }
 
-  static List<Polyline> buildPolylines(RoutePlan plan, Location vendorStart) {
+  static List<Polyline> buildPolylines(
+    RoutePlan plan,
+    Location vendorStart, {
+    Set<int> skipWindows = const {},
+  }) {
     final polylines = <Polyline>[];
     Location current = vendorStart;
     var windowIndex = 0;
@@ -81,13 +72,15 @@ class MapsService {
       if (window.stops.isNotEmpty) {
         current = window.stops.last.order.deliveryLocation;
       }
-      polylines.add(
-        Polyline(
-          points: points,
-          color: _windowColors[windowIndex % _windowColors.length],
-          strokeWidth: 4,
-        ),
-      );
+      if (!skipWindows.contains(windowIndex)) {
+        polylines.add(
+          Polyline(
+            points: points,
+            color: colorForWindow(windowIndex),
+            strokeWidth: 4,
+          ),
+        );
+      }
       windowIndex++;
     }
     return polylines;

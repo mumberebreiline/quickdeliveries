@@ -1,30 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'food_item.dart';
 import '../../services/cart_service.dart';
-import '../../services/cart_screen.dart';
+import 'cart_screen.dart';
+import '../../services/auth_service.dart';
+import '../../services/location_service.dart';
+import '../../models/location.dart';
+import '../../utils/constants.dart';
+import '../../widgets/location_status.dart';
 
 // ============================================================
 // 🍛 MAIN COURSES ONLY
 // ============================================================
 // This is a SEPARATE screen from order_detail_screen.dart, used
 // ONLY when opening an item from the "main courses" category —
-// wired up from food_selection_screen.dart specifically.
+// wire this up from food_selection_screen.dart specifically.
 //
 // Why separate: your Firestore data shows accompaniments only make
 // sense for main courses right now (e.g. Categories/main courses/
 // Accompaniment/meal001 → "white rice"). Other categories technically
 // have an Accompaniment subcollection too (like Breakfast's Twinings
-// tea), but only Main Courses shows this dropdown — every other
-// category uses the plain order_detail_screen.dart instead, which
-// has no dropdown at all.
+// tea), but per your instructions only Main Courses should show this
+// dropdown — every other category uses the plain order_detail_screen.dart
+// instead, which has no dropdown at all.
 //
-// Both "Add to Cart" and "Make Order" now go through the SAME path:
-// they add the item (with whichever accompaniments are checked) to
-// the shared cart, then Make Order additionally takes the customer
-// straight to CartScreen to finish there. CartScreen is the only
-// place that actually writes an order to Firestore — keeping order
-// submission in one spot instead of duplicated across screens.
+// Your accompaniment documents aren't totally consistent — some have
+// a Price and Available flag (Breakfast's Meal_007), others only have
+// a "name" (main courses' meal001, e.g. "white rice" — a free side).
+// This screen handles both: missing Price defaults to 0 (free),
+// missing Available defaults to true (shown).
 // ============================================================
 class MainCourseOrderDetailScreen extends StatefulWidget {
   final FoodItem food;
@@ -32,20 +37,69 @@ class MainCourseOrderDetailScreen extends StatefulWidget {
   const MainCourseOrderDetailScreen({super.key, required this.food});
 
   @override
-  State<MainCourseOrderDetailScreen> createState() => _MainCourseOrderDetailScreenState();
+  State<MainCourseOrderDetailScreen> createState() =>
+      _MainCourseOrderDetailScreenState();
 }
 
-class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScreen> {
+class _MainCourseOrderDetailScreenState
+    extends State<MainCourseOrderDetailScreen> {
   int _quantity = 1;
   late final TextEditingController _quantityController;
 
   // Each entry looks like: {"id": ..., "name": ..., "price": ...}
   final List<Map<String, dynamic>> _selectedAccompaniments = [];
 
+  bool _isPlacingOrder = false;
+
+  // Delivery location + time — same auto-capture pattern as
+  // cart_screen.dart. This screen places an order directly (skipping
+  // the cart), so it needs its own copy of this, not a shared cart.
+  final _locationService = LocationService();
+  Location? _customerLocation;
+  bool _isLocating = false;
+  String? _locationError;
+  TimeOfDay? _selectedTime;
+
   @override
   void initState() {
     super.initState();
     _quantityController = TextEditingController(text: _quantity.toString());
+    _captureLocation();
+  }
+
+  Future<void> _captureLocation() async {
+    setState(() {
+      _isLocating = true;
+      _locationError = null;
+    });
+    final location = await _locationService.getCurrentLocation();
+    if (!mounted) return;
+    setState(() {
+      _isLocating = false;
+      if (location == null) {
+        _locationError =
+            'Could not detect your location — check that location access is '
+            'allowed for this app, then try again.';
+      } else {
+        _customerLocation = Location(
+          id: 'customer_${DateTime.now().millisecondsSinceEpoch}',
+          name: CampusLocations.describeNearestBuilding(
+            location.latitude,
+            location.longitude,
+          ),
+          latitude: location.latitude,
+          longitude: location.longitude,
+        );
+      }
+    });
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked != null) setState(() => _selectedTime = picked);
   }
 
   @override
@@ -82,7 +136,11 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
         .snapshots();
   }
 
-  dynamic _pick(Map<String, dynamic> data, List<String> keys, dynamic fallback) {
+  dynamic _pick(
+    Map<String, dynamic> data,
+    List<String> keys,
+    dynamic fallback,
+  ) {
     for (final key in keys) {
       final value = data[key];
       if (value != null) return value;
@@ -106,9 +164,15 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
     return raw.toString().toLowerCase() == 'true';
   }
 
-  bool _isSelected(String id) => _selectedAccompaniments.any((item) => item['id'] == id);
+  bool _isSelected(String id) =>
+      _selectedAccompaniments.any((item) => item['id'] == id);
 
-  void _toggleAccompaniment(String id, String name, double price, bool checked) {
+  void _toggleAccompaniment(
+    String id,
+    String name,
+    double price,
+    bool checked,
+  ) {
     setState(() {
       if (checked) {
         _selectedAccompaniments.add({'id': id, 'name': name, 'price': price});
@@ -118,47 +182,133 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
     });
   }
 
-  double get _accompanimentsTotal =>
-      _selectedAccompaniments.fold(0.0, (sum, item) => sum + (item['price'] as double));
+  double get _accompanimentsTotal => _selectedAccompaniments.fold(
+    0.0,
+    (sum, item) => sum + (item['price'] as double),
+  );
 
   double get _total => (widget.food.price * _quantity) + _accompanimentsTotal;
 
-  // Accompaniments stripped of their "id" — CartService only needs
-  // name + price to store and later save to Firestore.
-  List<Map<String, dynamic>> get _accompanimentsForCart => _selectedAccompaniments
-      .map((item) => {'name': item['name'], 'price': item['price']})
-      .toList();
-
   void _addToCart() {
-    CartService.instance.addItem(
-      widget.food,
-      _quantity,
-      accompaniments: _accompanimentsForCart,
-    );
+    // TODO: extend CartService.addItem(...) to also accept the
+    // accompaniments list if you want them to travel into the cart.
+    CartService.instance.addItem(widget.food, _quantity);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$_quantity x ${widget.food.name} added to cart')),
     );
     Navigator.pop(context);
   }
 
-  // MAKE ORDER — adds this item (with its selected accompaniments) to
-  // the cart, then takes the customer straight to CartScreen to
-  // finish checkout there (enter their phone number, review the
-  // total, and submit).
-  void _makeOrder() {
-    CartService.instance.addItem(
-      widget.food,
-      _quantity,
-      accompaniments: _accompanimentsForCart,
+  Future<void> _makeOrder() async {
+    // main.dart already ensures someone's signed in (anonymously, if
+    // they never logged in) before this screen is even reachable — this
+    // is just a safety net in case that somehow didn't happen.
+    var user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      await AuthService().ensureSignedIn();
+      user = FirebaseAuth.instance.currentUser;
+    }
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not start a session — check your connection and try again',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (_customerLocation == null) {
+      await _captureLocation();
+    }
+    if (_customerLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not detect your location — please check location '
+            'permissions and try again',
+          ),
+        ),
+      );
+      return;
+    }
+    if (_selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose a preferred time')),
+      );
+      return;
+    }
+
+    setState(() => _isPlacingOrder = true);
+
+    final now = DateTime.now();
+    var preferredTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _selectedTime!.hour,
+      _selectedTime!.minute,
     );
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const CartScreen()),
-    );
+    if (preferredTime.isBefore(now)) {
+      preferredTime = preferredTime.add(const Duration(days: 1));
+    }
+
+    try {
+      // Each accompaniment becomes its OWN entry in the items array,
+      // instead of being nested inside the main dish's item — the
+      // vendor's FoodOrder model only ever reads foodId/name/price/
+      // quantity from each entry in this list, so anything nested one
+      // level deeper (like the old 'accompaniments' sub-field) was
+      // silently invisible on her screen even though it saved fine.
+      final items = [
+        {
+          'foodId': widget.food.id,
+          'name': widget.food.name,
+          'price': widget.food.price,
+          'quantity': _quantity,
+        },
+        for (final accompaniment in _selectedAccompaniments)
+          {
+            'foodId': accompaniment['id'],
+            'name': '${accompaniment['name']} (accompaniment)',
+            'price': accompaniment['price'],
+            'quantity': 1,
+          },
+      ];
+
+      await FirebaseFirestore.instance.collection('orders').add({
+        'userId': user.uid,
+        'items': items,
+        'total': _total,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'deliveryLocation': _customerLocation!.toMap(),
+        'preferredTime': Timestamp.fromDate(preferredTime),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Order placed! The vendor will see it shortly.'),
+        ),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not place order: $e')));
+    } finally {
+      if (mounted) setState(() => _isPlacingOrder = false);
+    }
   }
 
   void _openCart(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const CartScreen()));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CartScreen()),
+    );
   }
 
   @override
@@ -230,7 +380,10 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                     controller: _quantityController,
                     textAlign: TextAlign.center,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -256,10 +409,18 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                data: Theme.of(
+                  context,
+                ).copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
-                  title: const Text('Add Accompaniments', style: TextStyle(fontWeight: FontWeight.bold)),
-                  leading: const Icon(Icons.restaurant_menu, color: Colors.orange),
+                  title: const Text(
+                    'Add Accompaniments',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  leading: const Icon(
+                    Icons.restaurant_menu,
+                    color: Colors.orange,
+                  ),
                   children: [
                     StreamBuilder<QuerySnapshot>(
                       stream: _accompanimentsStream(),
@@ -267,10 +428,13 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                         if (snapshot.hasError) {
                           return Padding(
                             padding: const EdgeInsets.all(16),
-                            child: Text('Could not load accompaniments: ${snapshot.error}'),
+                            child: Text(
+                              'Could not load accompaniments: ${snapshot.error}',
+                            ),
                           );
                         }
-                        if (snapshot.connectionState == ConnectionState.waiting) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return const Padding(
                             padding: EdgeInsets.all(16),
                             child: CircularProgressIndicator(strokeWidth: 2),
@@ -293,16 +457,30 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
                         return Column(
                           children: availableDocs.map((doc) {
                             final data = doc.data() as Map<String, dynamic>;
-                            final name = _pick(data, ['name', 'Name'], 'Unnamed').toString();
+                            final name = _pick(data, [
+                              'name',
+                              'Name',
+                            ], 'Unnamed').toString();
                             final price = _readPrice(data);
 
                             return CheckboxListTile(
                               value: _isSelected(doc.id),
                               title: Text(name),
-                              subtitle: Text(price > 0 ? 'UGX ${price.toStringAsFixed(0)}' : 'Free'),
+                              // Shows "Free" instead of "UGX 0" for
+                              // accompaniments with no price, like white rice.
+                              subtitle: Text(
+                                price > 0
+                                    ? 'UGX ${price.toStringAsFixed(0)}'
+                                    : 'Free',
+                              ),
                               activeColor: Colors.orange,
                               onChanged: (checked) {
-                                _toggleAccompaniment(doc.id, name, price, checked ?? false);
+                                _toggleAccompaniment(
+                                  doc.id,
+                                  name,
+                                  price,
+                                  checked ?? false,
+                                );
                               },
                             );
                           }).toList(),
@@ -334,6 +512,30 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
               ),
             ],
 
+            const SizedBox(height: 20),
+            LocationStatus(
+              isLocating: _isLocating,
+              location: _customerLocation,
+              error: _locationError,
+              onRetry: _captureLocation,
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _pickTime,
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Preferred time',
+                  prefixIcon: Icon(Icons.access_time),
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(
+                  _selectedTime == null
+                      ? 'Choose a time'
+                      : _selectedTime!.format(context),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 24),
             Text(
               'Total: UGX ${_total.toStringAsFixed(0)}',
@@ -346,31 +548,52 @@ class _MainCourseOrderDetailScreenState extends State<MainCourseOrderDetailScree
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _addToCart,
+                    onPressed: _isPlacingOrder ? null : _addToCart,
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.orange),
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                     ),
                     child: const Text(
                       'ADD TO CART',
-                      style: TextStyle(fontSize: 14, color: Colors.orange, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _makeOrder,
+                    onPressed: _isPlacingOrder ? null : _makeOrder,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                     ),
-                    child: const Text(
-                      'MAKE ORDER',
-                      style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
+                    child: _isPlacingOrder
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'MAKE ORDER',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ],
