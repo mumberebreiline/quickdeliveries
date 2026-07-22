@@ -13,6 +13,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications requires this to be enabled —
+        // without it, the Android build fails at the AAR metadata
+        // check step, before compilation even starts.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -45,6 +49,10 @@ flutter {
     source = "../.."
 }
 dependencies {
+
+  // Required alongside isCoreLibraryDesugaringEnabled above, for
+  // flutter_local_notifications.
+  coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
   // Import the Firebase BoM
 
