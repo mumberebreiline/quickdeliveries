@@ -8,6 +8,7 @@ import '../../services/maps_service.dart';
 import '../../services/osrm_service.dart';
 import '../../services/route_optimizer_service.dart';
 import '../../utils/helpers.dart';
+import '../../widgets/location_preview.dart';
 
 class RouteMapScreen extends StatefulWidget {
   const RouteMapScreen({super.key});
@@ -531,24 +532,72 @@ class _StopTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: stop.isAtRiskOfLateness
-            ? Colors.red.shade100
-            : Colors.green.shade100,
-        child: Text('$index'),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // A real aerial snapshot of the exact delivery spot — the
+            // closest thing to "what does this place actually look
+            // like" that's achievable for free (no billing, no key).
+            LocationPreview(location: stop.order.deliveryLocation, size: 64),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: stop.isAtRiskOfLateness
+                            ? Colors.red.shade100
+                            : Colors.green.shade100,
+                        child: Text(
+                          '$index',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          stop.order.deliveryLocation.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      stop.isAtRiskOfLateness
+                          ? const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.red,
+                              size: 18,
+                            )
+                          : const Icon(
+                              Icons.check_circle,
+                              color: Colors.green,
+                              size: 18,
+                            ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${stop.order.customerName.isEmpty ? "Customer" : stop.order.customerName} • '
+                    '${stop.distanceFromPreviousKm.toStringAsFixed(2)} km • '
+                    'ETA ${formatTime(stop.estimatedArrival)}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    stop.reasonNote,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-      title: Text(stop.order.deliveryLocation.name),
-      subtitle: Text(
-        '${stop.order.customerName.isEmpty ? "Customer" : stop.order.customerName} • '
-        '${stop.distanceFromPreviousKm.toStringAsFixed(2)} km • '
-        'ETA ${formatTime(stop.estimatedArrival)}\n'
-        '${stop.reasonNote}',
-      ),
-      isThreeLine: true,
-      trailing: stop.isAtRiskOfLateness
-          ? const Icon(Icons.warning_amber_rounded, color: Colors.red)
-          : const Icon(Icons.check_circle, color: Colors.green),
     );
   }
 }

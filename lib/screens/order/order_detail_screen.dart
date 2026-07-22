@@ -62,12 +62,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             'Could not detect your location — check that location access is '
             'allowed for this app, then try again.';
       } else {
+        // Just the raw captured position — no attempt to guess which
+        // named building it's closest to. That guess was the actual
+        // source of wrong labels before (e.g. "Near Freedom Square"
+        // when the customer was really at Nkrumah Hall); the routing
+        // math was always using the precise coordinates regardless, so
+        // dropping the label doesn't lose any accuracy — it just stops
+        // presenting an estimate as if it were a confirmed fact.
         _customerLocation = Location(
           id: 'customer_${DateTime.now().millisecondsSinceEpoch}',
-          name: CampusLocations.describeNearestBuilding(
-            location.latitude,
-            location.longitude,
-          ),
+          name: "Customer's location",
           latitude: location.latitude,
           longitude: location.longitude,
         );

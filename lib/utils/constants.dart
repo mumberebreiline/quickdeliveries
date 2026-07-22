@@ -28,6 +28,17 @@ class CampusLocations {
 
   static const List<Location> buildings = [
     Location(
+      id: 'nkrumah_hall',
+      name: 'Nkrumah Hall',
+      // Approximate — public sources place it right next to Lumumba
+      // Hall (both are the Pan-African-named halls, built near each
+      // other), so this is offset slightly from Lumumba Hall's pin
+      // below. Worth replacing with a real GPS pin when convenient —
+      // same caveat as every other building here.
+      latitude: 0.33520,
+      longitude: 32.57050,
+    ),
+    Location(
       id: 'main_building',
       name: 'Main Building',
       latitude: 0.33170,
@@ -89,32 +100,5 @@ class CampusLocations {
       if (b.id == id) return b;
     }
     return null;
-  }
-
-  /// Turns a customer's raw captured GPS position into a friendly label
-  /// for the vendor's screens ("Near Mary Stuart Hall") while the actual
-  /// coordinates used for routing stay the precise captured ones — this
-  /// is purely cosmetic, it doesn't snap the delivery point itself to
-  /// the nearest building.
-  static String describeNearestBuilding(double latitude, double longitude) {
-    final point = Location(
-      id: '_probe',
-      name: '_probe',
-      latitude: latitude,
-      longitude: longitude,
-    );
-    Location? nearest;
-    double? minDistanceKm;
-    for (final building in buildings) {
-      final distance = point.distanceToKm(building);
-      if (minDistanceKm == null || distance < minDistanceKm) {
-        minDistanceKm = distance;
-        nearest = building;
-      }
-    }
-    if (nearest != null && minDistanceKm != null && minDistanceKm < 0.3) {
-      return 'Near ${nearest.name}';
-    }
-    return 'Customer\'s location';
   }
 }
