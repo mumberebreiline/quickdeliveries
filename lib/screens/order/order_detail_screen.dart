@@ -53,26 +53,25 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       _isLocating = true;
       _locationError = null;
     });
-    final location = await _locationService.getCurrentLocation();
-    if (!mounted) return;
-    setState(() {
-      _isLocating = false;
-      if (location == null) {
-        _locationError =
-            'Could not detect your location — check that location access is '
-            'allowed for this app, then try again.';
-      } else {
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+      setState(() {
+        _isLocating = false;
         _customerLocation = Location(
           id: 'customer_${DateTime.now().millisecondsSinceEpoch}',
-          name: CampusLocations.describeNearestBuilding(
-            location.latitude,
-            location.longitude,
-          ),
+          name: location.name,
           latitude: location.latitude,
           longitude: location.longitude,
         );
-      }
-    });
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLocating = false;
+        _locationError = e.toString();
+      });
+    }
   }
 
   Future<void> _pickTime() async {
