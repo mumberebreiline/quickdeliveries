@@ -10,7 +10,7 @@ class HomeScreen extends StatelessWidget {
 
   final List<String> images = [
     "assets/images/home2.jpg",
-    "assets/images/home3.jpg",
+    "assets/images/home4.jpg",
     "assets/images/home1.jpg",
   ];
 

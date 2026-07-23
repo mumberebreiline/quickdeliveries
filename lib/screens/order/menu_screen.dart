@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'breakfast_selection_screen.dart';
 import '../home/popular_screen.dart';
 import '../home/login_screen.dart';
@@ -7,6 +8,11 @@ import '../home/feedback_screen.dart';
 import 'food_selection_screen.dart';
 import 'vegetarian_meals_screen.dart';
 import 'drinks.dart';
+import 'cart_screen.dart';
+import '../../services/cart_service.dart';
+import 'food_item.dart';
+import 'order_detail_screen.dart';
+import 'main_course_order_detail_screen.dart';
 
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
@@ -36,13 +42,10 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
     super.dispose();
   }
 
-  // 👇 This list controls the 4 cards on this page.
+  // 👇 This list controls the cards on this page.
   // "title" = the word shown under the picture (and it's tappable!)
   // "image" = where Flutter should find the picture file
   // "screen" = which page to open when the picture or text is tapped
-  //
-  // Want to add a 5th category? Just copy one of the maps below,
-  // change the "title" and "image", and add its "screen" widget.
   List<Map<String, Object>> _categories() {
     return [
       {
@@ -62,7 +65,7 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
         // for now so the tile shows *something* real — swap in an
         // actual vegetarian photo whenever you have one, same folder.
         "title": "Vegetarian Special",
-        "image": "assets/images/menu5.jpg",
+        "image": "assets/images/menu9.jpg",
         "screen": const VegetarianMealsScreen(),
       },
       {
@@ -81,13 +84,15 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
     ];
   }
 
-  // The 4 options shown in the top-right dropdown menu.
-  // Each one opens a different page when tapped.
+  // The options shown in the top-right dropdown menu.
   void _handleDropdownSelection(String value) {
     Widget screen;
     switch (value) {
       case "Menu":
         screen = const MenuScreen();
+        break;
+      case "Cart":
+        screen = const CartScreen();
         break;
       case "Login":
         screen = const LoginScreen();
@@ -104,38 +109,82 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
     Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
   }
 
+  // ============================================================
+  // 🔍 DATABASE-BACKED SEARCH
+  // ============================================================
+  // A "collection group" query looks across EVERY "Meals" subcollection
+  // at once — Categories/Breakfast/Meals, Categories/Drinks/Meals,
+  // Categories/main courses/Meals, etc — instead of just one category.
+  // That's what actually lets someone search "chapati" and find it
+  // regardless of which category it lives under.
+  Stream<QuerySnapshot> _allMealsStream() {
+    return FirebaseFirestore.instance.collectionGroup('Meals').snapshots();
+  }
+
+  // Same field-picking pattern used across the app's other screens —
+  // checks a capitalized key first, then falls back to lowercase.
+  FoodItem _mealFromDoc(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+
+    String pick(List<String> keys, String fallback) {
+      for (final key in keys) {
+        final value = data[key];
+        if (value != null) return value.toString();
+      }
+      return fallback;
+    }
+
+    // The category a meal belongs to is the ID of its grandparent
+    // document: Categories/{categoryId}/Meals/{mealId}.
+    final categoryId = doc.reference.parent.parent?.id ?? '';
+
+    return FoodItem(
+      id: doc.id,
+      name: pick(['Name', 'name'], 'Unnamed'),
+      price: double.tryParse(pick(['Price', 'price'], '0')) ?? 0.0,
+      imageUrl: pick(['Image', 'imageUrl', 'image'], ''),
+      category: categoryId,
+    );
+  }
+
+  void _openSearchResult(BuildContext context, FoodItem food) {
+    final screen = food.category.toLowerCase() == 'main courses'
+        ? MainCourseOrderDetailScreen(food: food)
+        : OrderDetailScreen(food: food);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
+  }
+
   @override
   Widget build(BuildContext context) {
     final allCategories = _categories();
-
-    // Only keep the categories whose title matches what's typed in
-    // the search box. If the box is empty, everything shows.
-    final filteredCategories = allCategories.where((category) {
-      final title = (category["title"] as String).toLowerCase();
-      return title.contains(_searchQuery.toLowerCase());
-    }).toList();
+    final orientation = MediaQuery.of(context).orientation;
+    final crossAxisCount = orientation == Orientation.landscape ? 3 : 2;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
-        // When searching, the title turns into a text field.
         title: _isSearching
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
-                style: const TextStyle(color: Color.fromARGB(255, 255, 152, 0)),
+                style: const TextStyle(color: Color.fromARGB(255, 255, 150, 4)),
                 decoration: const InputDecoration(
-                  hintText: "Search meals...",
-                  hintStyle: TextStyle(color: Color.fromARGB(255, 255, 152, 0)),
+                  hintText: "Search for a dish...",
+                  hintStyle: TextStyle(color: Colors.white70),
                   border: InputBorder.none,
                 ),
                 onChanged: (value) {
-                  setState(() => _searchQuery = value);
+                  setState(() => _searchQuery = value.trim());
                 },
               )
-            : const Text('Select a Meal'),
+            : const Text(
+                'Select a Meal',
+                style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+              ),
         centerTitle: !_isSearching,
+        backgroundColor: Colors.orange,
+        elevation: 0,
         actions: [
-          // 🔍 Search bar (top right, before the dropdown)
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
             onPressed: () {
@@ -148,13 +197,32 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
               });
             },
           ),
-
-          // ☰ Dropdown menu (top right, right after the search bar)
+          // 🛒 Cart icon with a live badge — same pattern as every
+          // selection screen. Updates automatically whenever the cart
+          // changes anywhere in the app.
+          ListenableBuilder(
+            listenable: CartService.instance,
+            builder: (context, _) {
+              final count = CartService.instance.itemCount;
+              return IconButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CartScreen()),
+                ),
+                icon: Badge(
+                  label: Text('$count'),
+                  isLabelVisible: count > 0,
+                  child: const Icon(Icons.shopping_cart),
+                ),
+              );
+            },
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.menu),
             onSelected: _handleDropdownSelection,
             itemBuilder: (context) => const [
               PopupMenuItem(value: "Menu", child: Text("Menu")),
+              PopupMenuItem(value: "Cart", child: Text("Cart")),
               PopupMenuItem(value: "Login", child: Text("Login")),
               PopupMenuItem(value: "About", child: Text("About")),
               PopupMenuItem(value: "Feedback", child: Text("Feedback")),
@@ -162,80 +230,161 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
           ),
         ],
       ),
+      // Once there's an actual search query, show live database results
+      // instead of the category grid.
+      body: _searchQuery.isEmpty
+          ? _buildCategoryView(context, allCategories, crossAxisCount)
+          : _buildSearchResults(context),
+    );
+  }
 
-      // SingleChildScrollView makes the WHOLE screen scrollable,
-      // including the grid of pictures and the green footer below it.
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              // Always shows the pictures in a 2-column grid.
-              child: GridView.builder(
-                // These two lines let the grid live inside the
-                // SingleChildScrollView above instead of trying to
-                // scroll on its own.
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: filteredCategories.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount:
-                      2, // 👈 change this number for more/fewer columns
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 0.95,
-                ),
-                itemBuilder: (context, index) {
-                  final category = filteredCategories[index];
-                  return CategoryCard(
-                    title: category["title"] as String,
-                    imageUrl: category["image"] as String,
+  Widget _buildCategoryView(
+    BuildContext context,
+    List<Map<String, Object>> allCategories,
+    int crossAxisCount,
+  ) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: allCategories.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount, // 👈 2 in portrait, 3 in landscape
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 0.95,
+              ),
+              itemBuilder: (context, index) {
+                final category = allCategories[index];
+                return CategoryCard(
+                  title: category["title"] as String,
+                  imageUrl: category["image"] as String,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => category["screen"] as Widget),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // 🟩 Footer with the same tappable text, on an orange background.
+          Container(
+            width: double.infinity,
+            color: const Color.fromARGB(255, 255, 153, 0),
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: allCategories.map((category) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: GestureDetector(
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (context) => category["screen"] as Widget,
+                      MaterialPageRoute(builder: (context) => category["screen"] as Widget),
+                    ),
+                    child: Text(
+                      category["title"] as String,
+                      style: const TextStyle(
+                        color: Color.fromARGB(255, 252, 251, 249),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              }).toList(),
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // 🟩 Footer with the same tappable text, on a green background.
-            // Column stacks the text items one under the other (a
-            // vertical list) instead of side by side.
-            Container(
-              width: double.infinity,
-              color: const Color.fromARGB(255, 255, 153, 0),
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+  Widget _buildSearchResults(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _allMealsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('Could not search right now: ${snapshot.error}', textAlign: TextAlign.center),
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final query = _searchQuery.toLowerCase();
+        final results = (snapshot.data?.docs ?? [])
+            .map(_mealFromDoc)
+            .where((food) => food.name.toLowerCase().contains(query))
+            .toList();
+
+        if (results.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: allCategories.map((category) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => category["screen"] as Widget,
-                        ),
-                      ),
-                      child: Text(
-                        category["title"] as String,
-                        style: const TextStyle(
-                          color: Color.fromARGB(255, 252, 251, 249),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+                children: [
+                  Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
+                  const SizedBox(height: 12),
+                  Text('No dishes found for "$_searchQuery"', textAlign: TextAlign.center),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: results.length,
+          itemBuilder: (context, index) {
+            final food = results[index];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              elevation: 2,
+              shadowColor: Colors.black12,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(10),
+                onTap: () => _openSearchResult(context, food),
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(
+                    food.imageUrl,
+                    width: 56,
+                    height: 56,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      width: 56,
+                      height: 56,
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.fastfood),
+                    ),
+                  ),
+                ),
+                title: Text(food.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                  food.category,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+                trailing: Text(
+                  'UGX ${food.price.toStringAsFixed(0)}',
+                  style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -255,50 +404,55 @@ class CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // The picture itself — tapping it opens the category screen
-        Expanded(
-          child: GestureDetector(
-            onTap: onTap,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(15),
-              child: Image.asset(
-                imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                // If Flutter can't find the picture file, this shows a
-                // simple grey box with a message instead of crashing.
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.grey[300],
-                    alignment: Alignment.center,
-                    child: const Text('Add your picture here'),
-                  );
-                },
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.10),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey[300],
+                      alignment: Alignment.center,
+                      child: const Text('Add your picture here'),
+                    );
+                  },
+                ),
               ),
             ),
           ),
-        ),
 
-        const SizedBox(height: 8),
+          const SizedBox(height: 8),
 
-        // 👇 The text UNDER the picture — tapping this also opens the
-        // same category screen as tapping the picture does.
-        GestureDetector(
-          onTap: onTap,
-          child: Text(
+          Text(
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 22,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
+              letterSpacing: 0.6,
+              color: Colors.black87,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
