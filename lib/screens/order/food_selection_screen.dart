@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'food_item.dart';
 import 'main_course_order_detail_screen.dart';
 import '../../services/cart_service.dart';
-import '../../services/cart_screen.dart';
+import 'cart_screen.dart';
 
 // ============================================================
 // 📂 THIS SCREEN IS FOR "main courses" SPECIFICALLY
@@ -14,17 +14,11 @@ import '../../services/cart_screen.dart';
 // MainCourseOrderDetailScreen (the version WITH the accompaniments
 // dropdown), because your Firestore data shows that's the category
 // with meaningful accompaniments (e.g. "white rice").
-//
-// Your other selection screens (breakfast_selection_screen.dart,
-// drinks.dart, vegetarian_meals_screen.dart) still import the plain
-// order_detail_screen.dart — no changes needed there, they'll
-// automatically NOT show a dropdown.
 // ============================================================
 
 class FoodSelectionScreen extends StatelessWidget {
   const FoodSelectionScreen({super.key});
 
-  // Points at: Categories/main courses/Meals
   Stream<QuerySnapshot> _mealsStream() {
     return FirebaseFirestore.instance
         .collection('Categories')
@@ -33,10 +27,6 @@ class FoodSelectionScreen extends StatelessWidget {
         .snapshots();
   }
 
-  // Turns one "Meals" document into a FoodItem. Checks a capitalized
-  // field name first, then falls back to lowercase — your actual
-  // "main courses" documents use lowercase (name/price/image), so
-  // this covers both.
   FoodItem _mealFromDoc(String id, Map<String, dynamic> data) {
     String pick(List<String> keys, String fallback) {
       for (final key in keys) {
@@ -63,14 +53,16 @@ class FoodSelectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final orientation = MediaQuery.of(context).orientation;
+    final crossAxisCount = orientation == Orientation.landscape ? 3 : 2;
+
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
-        title: const Text('Main Courses'),
+        title: const Text('Main Courses', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.orange,
+        elevation: 0,
         actions: [
-          // 🛒 Cart icon with a live badge showing how many items are
-          // currently in the cart. Updates automatically whenever the
-          // cart changes anywhere in the app.
           ListenableBuilder(
             listenable: CartService.instance,
             builder: (context, _) {
@@ -125,8 +117,8 @@ class FoodSelectionScreen extends StatelessWidget {
           return GridView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: docs.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount, // 👈 2 in portrait, 3 in landscape
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
               childAspectRatio: 0.68,
@@ -160,8 +152,18 @@ class _MainCourseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -200,9 +202,7 @@ class _MainCourseCard extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
-                const SizedBox(height: 2),
-                // Fixed: was '\UGX...' which isn't valid Dart (that
-                // backslash starts an invalid escape sequence).
+                const SizedBox(height: 4),
                 Text(
                   'UGX ${food.price.toStringAsFixed(0)}',
                   style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),

@@ -3,30 +3,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'food_item.dart';
 import '../../services/cart_service.dart';
-import '../../services/cart_screen.dart';
+import 'cart_screen.dart';
 import '../../services/auth_service.dart';
+import '../../services/location_service.dart';
+import '../../models/location.dart';
+import '../../utils/constants.dart';
+import '../../widgets/location_status.dart';
 
-// ============================================================
-// 🍛 MAIN COURSES ONLY
-// ============================================================
-// This is a SEPARATE screen from order_detail_screen.dart, used
-// ONLY when opening an item from the "main courses" category —
-// wire this up from food_selection_screen.dart specifically.
-//
-// Why separate: your Firestore data shows accompaniments only make
-// sense for main courses right now (e.g. Categories/main courses/
-// Accompaniment/meal001 → "white rice"). Other categories technically
-// have an Accompaniment subcollection too (like Breakfast's Twinings
-// tea), but per your instructions only Main Courses should show this
-// dropdown — every other category uses the plain order_detail_screen.dart
-// instead, which has no dropdown at all.
-//
-// Your accompaniment documents aren't totally consistent — some have
-// a Price and Available flag (Breakfast's Meal_007), others only have
-// a "name" (main courses' meal001, e.g. "white rice" — a free side).
-// This screen handles both: missing Price defaults to 0 (free),
-// missing Available defaults to true (shown).
-// ============================================================
 class MainCourseOrderDetailScreen extends StatefulWidget {
   final FoodItem food;
 
@@ -42,15 +25,55 @@ class _MainCourseOrderDetailScreenState
   int _quantity = 1;
   late final TextEditingController _quantityController;
 
-  // Each entry looks like: {"id": ..., "name": ..., "price": ...}
   final List<Map<String, dynamic>> _selectedAccompaniments = [];
 
   bool _isPlacingOrder = false;
+
+  final _locationService = LocationService();
+  Location? _customerLocation;
+  bool _isLocating = false;
+  String? _locationError;
+  TimeOfDay? _selectedTime;
 
   @override
   void initState() {
     super.initState();
     _quantityController = TextEditingController(text: _quantity.toString());
+    _captureLocation();
+  }
+
+  Future<void> _captureLocation() async {
+    setState(() {
+      _isLocating = true;
+      _locationError = null;
+    });
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+      setState(() {
+        _isLocating = false;
+        _customerLocation = Location(
+          id: 'customer_${DateTime.now().millisecondsSinceEpoch}',
+          name: location.name,
+          latitude: location.latitude,
+          longitude: location.longitude,
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLocating = false;
+        _locationError = e.toString();
+      });
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked != null) setState(() => _selectedTime = picked);
   }
 
   @override
@@ -78,11 +101,10 @@ class _MainCourseOrderDetailScreenState
     if (parsed != null) _updateQuantity(parsed);
   }
 
-  // Points at: Categories/main courses/Accompaniment
   Stream<QuerySnapshot> _accompanimentsStream() {
     return FirebaseFirestore.instance
         .collection('Categories')
-        .doc(widget.food.category) // will be "main courses"
+        .doc(widget.food.category)
         .collection('Accompaniment')
         .snapshots();
   }
@@ -99,16 +121,12 @@ class _MainCourseOrderDetailScreenState
     return fallback;
   }
 
-  // Defaults to 0 — your "white rice" style accompaniments have no
-  // Price field at all, meaning they're free add-ons.
   double _readPrice(Map<String, dynamic> data) {
     final raw = _pick(data, ['Price', 'price'], 0);
     if (raw is num) return raw.toDouble();
     return double.tryParse(raw.toString()) ?? 0.0;
   }
 
-  // Defaults to true — accompaniments with no Available field (like
-  // "white rice") should still show up as selectable.
   bool _readAvailable(Map<String, dynamic> data) {
     final raw = _pick(data, ['Available', 'available'], true);
     if (raw is bool) return raw;
@@ -141,8 +159,6 @@ class _MainCourseOrderDetailScreenState
   double get _total => (widget.food.price * _quantity) + _accompanimentsTotal;
 
   void _addToCart() {
-    // TODO: extend CartService.addItem(...) to also accept the
-    // accompaniments list if you want them to travel into the cart.
     CartService.instance.addItem(widget.food, _quantity);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$_quantity x ${widget.food.name} added to cart')),
@@ -151,9 +167,6 @@ class _MainCourseOrderDetailScreenState
   }
 
   Future<void> _makeOrder() async {
-    // main.dart already ensures someone's signed in (anonymously, if
-    // they never logged in) before this screen is even reachable — this
-    // is just a safety net in case that somehow didn't happen.
     var user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       await AuthService().ensureSignedIn();
@@ -170,25 +183,66 @@ class _MainCourseOrderDetailScreenState
       return;
     }
 
+    if (_customerLocation == null) {
+      await _captureLocation();
+    }
+    if (_customerLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not detect your location — please check location '
+            'permissions and try again',
+          ),
+        ),
+      );
+      return;
+    }
+    if (_selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose a preferred time')),
+      );
+      return;
+    }
+
     setState(() => _isPlacingOrder = true);
 
+    final now = DateTime.now();
+    var preferredTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _selectedTime!.hour,
+      _selectedTime!.minute,
+    );
+    if (preferredTime.isBefore(now)) {
+      preferredTime = preferredTime.add(const Duration(days: 1));
+    }
+
     try {
+      final items = [
+        {
+          'foodId': widget.food.id,
+          'name': widget.food.name,
+          'price': widget.food.price,
+          'quantity': _quantity,
+        },
+        for (final accompaniment in _selectedAccompaniments)
+          {
+            'foodId': accompaniment['id'],
+            'name': '${accompaniment['name']} (accompaniment)',
+            'price': accompaniment['price'],
+            'quantity': 1,
+          },
+      ];
+
       await FirebaseFirestore.instance.collection('orders').add({
         'userId': user.uid,
-        'items': [
-          {
-            'foodId': widget.food.id,
-            'name': widget.food.name,
-            'price': widget.food.price,
-            'quantity': _quantity,
-            'accompaniments': _selectedAccompaniments
-                .map((item) => {'name': item['name'], 'price': item['price']})
-                .toList(),
-          },
-        ],
+        'items': items,
         'total': _total,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
+        'deliveryLocation': _customerLocation!.toMap(),
+        'preferredTime': Timestamp.fromDate(preferredTime),
       });
 
       if (!mounted) return;
@@ -306,7 +360,6 @@ class _MainCourseOrderDetailScreenState
 
             const SizedBox(height: 24),
 
-            // 🥗 "Add Accompaniments" dropdown
             Container(
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.orange.shade200),
@@ -370,8 +423,6 @@ class _MainCourseOrderDetailScreenState
                             return CheckboxListTile(
                               value: _isSelected(doc.id),
                               title: Text(name),
-                              // Shows "Free" instead of "UGX 0" for
-                              // accompaniments with no price, like white rice.
                               subtitle: Text(
                                 price > 0
                                     ? 'UGX ${price.toStringAsFixed(0)}'
@@ -415,6 +466,30 @@ class _MainCourseOrderDetailScreenState
                 }).toList(),
               ),
             ],
+
+            const SizedBox(height: 20),
+            LocationStatus(
+              isLocating: _isLocating,
+              location: _customerLocation,
+              error: _locationError,
+              onRetry: _captureLocation,
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _pickTime,
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Preferred time',
+                  prefixIcon: Icon(Icons.access_time),
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(
+                  _selectedTime == null
+                      ? 'Choose a time'
+                      : _selectedTime!.format(context),
+                ),
+              ),
+            ),
 
             const SizedBox(height: 24),
             Text(

@@ -4,27 +4,43 @@ import '../models/location.dart';
 import '../services/location_service.dart';
 import '../utils/constants.dart';
 
-/// Tracks where the vendor currently is, for the route optimizer's
-/// starting point. Falls back to the fixed vendor base location if GPS
-/// isn't available yet.
 class LocationProvider extends ChangeNotifier {
   final LocationService _locationService;
   StreamSubscription<Location>? _locationSub;
 
   Location? _currentLocation;
   bool _isTracking = false;
+  bool _isLocating = false;
+  String? _error;
 
   LocationProvider({LocationService? locationService})
-    : _locationService = locationService ?? LocationService();
+      : _locationService = locationService ?? LocationService();
 
-  Location get currentLocation =>
-      _currentLocation ?? CampusLocations.vendorBase;
+  /// Still falls back to vendorBase so the rest of the app never crashes
+  /// on a null location — but now _error tells you WHY it's a fallback,
+  /// instead of that being invisible.
+  Location get currentLocation => _currentLocation ?? CampusLocations.vendorBase;
   bool get isTracking => _isTracking;
+  bool get isLocating => _isLocating;
+  String? get error => _error;
+  bool get hasRealLocation => _currentLocation != null;
 
   Future<void> refreshOnce() async {
-    final location = await _locationService.getCurrentLocation();
-    if (location != null) {
+    _isLocating = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final location = await _locationService.getCurrentLocation();
       _currentLocation = location;
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      // Deliberately NOT clearing _currentLocation here — if we had a
+      // real fix before and this refresh just failed, keep showing the
+      // last known-good position instead of snapping back to the fallback.
+    } finally {
+      _isLocating = false;
       notifyListeners();
     }
   }
@@ -32,10 +48,18 @@ class LocationProvider extends ChangeNotifier {
   void startTracking() {
     if (_isTracking) return;
     _isTracking = true;
-    _locationSub = _locationService.streamLocation().listen((location) {
-      _currentLocation = location;
-      notifyListeners();
-    });
+    _error = null;
+    _locationSub = _locationService.streamLocation().listen(
+      (location) {
+        _currentLocation = location;
+        _error = null;
+        notifyListeners();
+      },
+      onError: (e) {
+        _error = e.toString();
+        notifyListeners();
+      },
+    );
     notifyListeners();
   }
 

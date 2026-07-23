@@ -10,7 +10,7 @@ class HomeScreen extends StatelessWidget {
 
   final List<String> images = [
     "assets/images/home2.jpg",
-    "assets/images/home3.jpg",
+    "assets/images/home4.jpg",
     "assets/images/home1.jpg",
   ];
 
@@ -20,7 +20,6 @@ class HomeScreen extends StatelessWidget {
       body: Stack(
         children: [
           // Sliding food images
-
           CarouselSlider(
             options: CarouselOptions(
               height: double.infinity,
@@ -38,16 +37,12 @@ class HomeScreen extends StatelessWidget {
           ),
 
           // Dark transparent layer
-
-          Container(
-            color: Colors.black.withValues(alpha: 0.45),
-          ),
+          Container(color: Colors.black.withValues(alpha: 0.45)),
 
           SafeArea(
             child: Column(
               children: [
                 // Top navigation
-
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 30,
@@ -56,10 +51,7 @@ class HomeScreen extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Image.asset(
-                        "assets/images/logo.jpg",
-                        height: 55,
-                      ),
+                      Image.asset("assets/images/logo.jpg", height: 55),
                       Row(
                         children: [
                           navItem(
@@ -103,7 +95,7 @@ class HomeScreen extends StatelessWidget {
                             ),
                           ),
                         ],
-                      )
+                      ),
                     ],
                   ),
                 ),
@@ -111,7 +103,6 @@ class HomeScreen extends StatelessWidget {
                 const Spacer(),
 
                 // Center content
-
                 const Text(
                   "Delicious meals\nmade with love",
                   textAlign: TextAlign.center,
@@ -129,7 +120,8 @@ class HomeScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => MenuScreen()//MealCategoryScreen(),
+                        builder: (context) =>
+                            MenuScreen(), //MealCategoryScreen(),
                       ),
                     );
                   },
@@ -156,7 +148,7 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 80),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
@@ -170,10 +162,7 @@ class HomeScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Text(
           title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 16),
         ),
       ),
     );

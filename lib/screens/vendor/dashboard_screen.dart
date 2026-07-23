@@ -6,7 +6,6 @@ import '../home/login_screen.dart';
 import 'incoming_orders_screen.dart';
 import 'route_map_screen.dart';
 import 'delivery_history_screen.dart';
-import 'hazards_screen.dart';
 
 class VendorDashboardScreen extends StatelessWidget {
   const VendorDashboardScreen({super.key});
@@ -87,15 +86,6 @@ class VendorDashboardScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const RouteMapScreen()),
-              ),
-            ),
-            _DashboardTile(
-              icon: Icons.warning_amber_rounded,
-              label: 'Route Hazards',
-              subtitle: 'Flag problem spots for smarter routing',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const HazardsScreen()),
               ),
             ),
             _DashboardTile(

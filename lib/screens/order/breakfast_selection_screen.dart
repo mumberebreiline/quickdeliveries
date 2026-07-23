@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'food_item.dart';
 import 'order_detail_screen.dart';
 import '../../services/cart_service.dart';
+import 'cart_screen.dart';
 
 // ============================================================
 // 📂 YOUR ACTUAL FIRESTORE STRUCTURE (from the console screenshot)
@@ -11,19 +12,6 @@ import '../../services/cart_service.dart';
 //     └─ Breakfast (document)     ← has fields: Description, Image,
 //                                    Name, Order, isActive
 //          └─ Meals (subcollection)  ← the actual food items live here
-//
-// This is different from a flat "foods" collection with a
-// "category" field — the meals are nested INSIDE the Breakfast
-// document. That's why the earlier version wasn't finding anything:
-// it was looking in the wrong place.
-//
-// IMPORTANT: your Category document (Breakfast) uses capitalized
-// field names — Name, Image, Description. Your Meal documents
-// inside "Meals" are very likely capitalized the same way (e.g.
-// Name, Price, Image) rather than lowercase (name, price, image).
-// Open one document inside Categories → Breakfast → Meals in the
-// Firebase console and check the exact field names — if they don't
-// match what's used below, just update the keys in _mealFromDoc().
 // ============================================================
 
 class BreakfastSelectionScreen extends StatelessWidget {
@@ -61,12 +49,44 @@ class BreakfastSelectionScreen extends StatelessWidget {
     );
   }
 
+  void _openCart(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CartScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final orientation = MediaQuery.of(context).orientation;
+    final crossAxisCount = orientation == Orientation.landscape ? 3 : 2;
+
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
-        title: const Text('Breakfast'),
+        title: const Text('Breakfast', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.orange,
+        elevation: 0,
+        actions: [
+          // 🛒 Cart icon with a live badge showing how many items are
+          // currently in the cart — same pattern as every other
+          // selection screen. Updates automatically whenever the cart
+          // changes anywhere in the app.
+          ListenableBuilder(
+            listenable: CartService.instance,
+            builder: (context, _) {
+              final count = CartService.instance.itemCount;
+              return IconButton(
+                onPressed: () => _openCart(context),
+                icon: Badge(
+                  label: Text('$count'),
+                  isLabelVisible: count > 0,
+                  child: const Icon(Icons.shopping_cart),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       // StreamBuilder listens to Firestore live — the screen updates
       // automatically the moment data changes, with no manual refresh.
@@ -111,12 +131,12 @@ class BreakfastSelectionScreen extends StatelessWidget {
             );
           }
 
-          // GridView.builder arranges the cards 2 per row.
+          // GridView.builder arranges the cards responsively.
           return GridView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: docs.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // 👈 2 items per row
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount, // 👈 2 in portrait, 3 in landscape
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
               childAspectRatio: 0.68, // taller cards so there's room for buttons
@@ -150,8 +170,18 @@ class _BreakfastCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -169,7 +199,7 @@ class _BreakfastCard extends StatelessWidget {
                 errorBuilder: (context, error, stackTrace) => Container(
                   color: Colors.grey[300],
                   alignment: Alignment.center,
-                  child: const Icon(Icons.fastfood, size: 40),
+                  child: const Icon(Icons.free_breakfast, size: 40, color: Colors.brown),
                 ),
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
@@ -199,9 +229,9 @@ class _BreakfastCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
-                  'UGX${food.price.toStringAsFixed(2)}',
+                  'UGX ${food.price.toStringAsFixed(0)}',
                   style: const TextStyle(
                     color: Colors.orange,
                     fontWeight: FontWeight.bold,
