@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/order_model.dart';
 import '../utils/helpers.dart';
 import 'status_badge.dart';
@@ -8,6 +9,21 @@ class OrderCard extends StatelessWidget {
   final Widget? actions;
 
   const OrderCard({super.key, required this.order, this.actions});
+
+  Future<void> _callCustomer(BuildContext context) async {
+    if (order.customerPhone.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: order.customerPhone);
+    final launched = await launchUrl(uri);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not open the phone dialer for ${order.customerPhone}',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +50,44 @@ class OrderCard extends StatelessWidget {
                 ),
                 StatusBadge(status: order.status),
               ],
+            ),
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: order.customerPhone.isEmpty
+                  ? null
+                  : () => _callCustomer(context),
+              borderRadius: BorderRadius.circular(6),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.phone,
+                    size: 14,
+                    color: order.customerPhone.isEmpty
+                        ? Colors.grey
+                        : Colors.green,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    order.customerPhone.isEmpty
+                        ? 'No phone number given'
+                        : order.customerPhone,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: order.customerPhone.isEmpty
+                          ? Colors.grey
+                          : Colors.green.shade700,
+                      decoration: order.customerPhone.isEmpty
+                          ? null
+                          : TextDecoration.underline,
+                    ),
+                  ),
+                  if (order.customerPhone.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.call, size: 12, color: Colors.green.shade700),
+                  ],
+                ],
+              ),
             ),
             const SizedBox(height: 6),
             Row(

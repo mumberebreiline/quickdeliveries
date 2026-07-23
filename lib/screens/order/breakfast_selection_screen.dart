@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'food_item.dart';
 import 'order_detail_screen.dart';
 import '../../services/cart_service.dart';
+import 'cart_screen.dart';
 
 // ============================================================
 // 📂 YOUR ACTUAL FIRESTORE STRUCTURE (from the console screenshot)
@@ -61,12 +62,39 @@ class BreakfastSelectionScreen extends StatelessWidget {
     );
   }
 
+  void _openCart(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CartScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Breakfast'),
         backgroundColor: Colors.orange,
+        actions: [
+          // 🛒 Cart icon with a live badge showing how many items are
+          // currently in the cart — same as on the Main Courses screen.
+          // Updates automatically whenever the cart changes anywhere
+          // in the app.
+          ListenableBuilder(
+            listenable: CartService.instance,
+            builder: (context, _) {
+              final count = CartService.instance.itemCount;
+              return IconButton(
+                onPressed: () => _openCart(context),
+                icon: Badge(
+                  label: Text('$count'),
+                  isLabelVisible: count > 0,
+                  child: const Icon(Icons.shopping_cart),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       // StreamBuilder listens to Firestore live — the screen updates
       // automatically the moment data changes, with no manual refresh.
@@ -119,7 +147,8 @@ class BreakfastSelectionScreen extends StatelessWidget {
               crossAxisCount: 2, // 👈 2 items per row
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio: 0.68, // taller cards so there's room for buttons
+              childAspectRatio:
+                  0.68, // taller cards so there's room for buttons
             ),
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
@@ -201,7 +230,7 @@ class _BreakfastCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'UGX${food.price.toStringAsFixed(2)}',
+                  'UGX ${food.price.toStringAsFixed(0)}',
                   style: const TextStyle(
                     color: Colors.orange,
                     fontWeight: FontWeight.bold,

@@ -28,6 +28,17 @@ class CampusLocations {
 
   static const List<Location> buildings = [
     Location(
+      id: 'nkrumah_hall',
+      name: 'Nkrumah Hall',
+      // Approximate — public sources place it right next to Lumumba
+      // Hall (both are the Pan-African-named halls, built near each
+      // other), so this is offset slightly from Lumumba Hall's pin
+      // below. Worth replacing with a real GPS pin when convenient —
+      // same caveat as every other building here.
+      latitude: 0.33520,
+      longitude: 32.57050,
+    ),
+    Location(
       id: 'main_building',
       name: 'Main Building',
       latitude: 0.33170,

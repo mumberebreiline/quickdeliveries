@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'food_item.dart';
 import 'main_course_order_detail_screen.dart';
 import '../../services/cart_service.dart';
-import '../../services/cart_screen.dart';
+import 'cart_screen.dart';
 
 // ============================================================
 // 📂 THIS SCREEN IS FOR "main courses" SPECIFICALLY
@@ -58,7 +58,10 @@ class FoodSelectionScreen extends StatelessWidget {
   }
 
   void _openCart(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const CartScreen()));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CartScreen()),
+    );
   }
 
   @override
@@ -154,7 +157,9 @@ class _MainCourseCard extends StatelessWidget {
   void _openOrderScreen(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => MainCourseOrderDetailScreen(food: food)),
+      MaterialPageRoute(
+        builder: (context) => MainCourseOrderDetailScreen(food: food),
+      ),
     );
   }
 
@@ -180,7 +185,9 @@ class _MainCourseCard extends StatelessWidget {
                 ),
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
-                  return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                  return const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
                 },
               ),
             ),
@@ -197,7 +204,10 @@ class _MainCourseCard extends StatelessWidget {
                     food.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -205,7 +215,10 @@ class _MainCourseCard extends StatelessWidget {
                 // backslash starts an invalid escape sequence).
                 Text(
                   'UGX ${food.price.toStringAsFixed(0)}',
-                  style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
 
@@ -216,11 +229,17 @@ class _MainCourseCard extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
                     child: const Text(
                       'ORDER NOW',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -238,11 +257,17 @@ class _MainCourseCard extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.orange),
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
                     child: const Text(
                       'ADD TO CART',
-                      style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),

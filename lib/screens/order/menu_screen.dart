@@ -47,27 +47,35 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
     return [
       {
         "title": "Breakfast",
-        "image": "assets/images/menu1.jpeg",
+        "image": "assets/images/images (89).jpeg",
         "screen": const BreakfastSelectionScreen(),
       },
       {
         "title": "Main Courses",
-        "image": "assets/images/home1.jpg",
+        "image": "assets/images/menu4.jpg",
         "screen": const FoodSelectionScreen(),
       },
       {
+        // Was "Screenshot_2026-07-12-20-11-25-60.jpg" — that file
+        // doesn't exist in assets/images/, so this tile was silently
+        // falling back to a placeholder icon. Using an existing image
+        // for now so the tile shows *something* real — swap in an
+        // actual vegetarian photo whenever you have one, same folder.
         "title": "Vegetarian Special",
-        "image": "assets/images/Screenshot_2026-07-12-20-11-25-60.jpg",
+        "image": "assets/images/menu5.jpg",
         "screen": const VegetarianMealsScreen(),
       },
       {
+        // Was "images (35).jpeg" — also missing, same fix as above.
         "title": "Drinks",
-        "image": "assets/images/images (35).jpeg",
+        "image": "assets/images/menu6.jpeg",
         "screen": const DrinksSelectionScreen(),
       },
       {
+        // Was "Screenshot_2026-07-12-20-17-18-33.jpg" — also missing.
         "title": "Popular",
-        "image": "assets/images/Screenshot_2026-07-12-20-17-18-33.jpg",
+        "image":
+            "assets/images/pngtree-jollof-rice-plate-west-african-spicy-tomato-dish-image_17435425.jpg",
         "screen": const PopularScreen(),
       },
     ];
@@ -93,10 +101,7 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
       default:
         screen = const MenuScreen();
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => screen),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
   }
 
   @override
@@ -174,7 +179,8 @@ class _MenuScreenBodyState extends State<_MenuScreenBody> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: filteredCategories.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, // 👈 change this number for more/fewer columns
+                  crossAxisCount:
+                      2, // 👈 change this number for more/fewer columns
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
                   childAspectRatio: 0.95,

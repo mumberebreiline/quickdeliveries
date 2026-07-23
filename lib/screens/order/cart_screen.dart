@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'cart_service.dart';
-import 'auth_service.dart';
-import '../models/location.dart';
-import '../utils/constants.dart';
+import '../../../services/cart_service.dart';
+import '../../../services/auth_service.dart';
+import '../../../services/location_service.dart';
+import '../../../models/location.dart';
+import '../../../utils/constants.dart';
+import '../../../widgets/location_status.dart';
 
 // Shows everything currently in the cart, with a running total
 // calculated from ALL items. Asks for the customer's name, phone number,
-// delivery building, and preferred time — the vendor's route optimizer
-// needs the last two to plan deliveries at all — then sends the whole
-// cart to Firestore as one order document.
+// and preferred time. Delivery location is captured automatically from
+// device GPS — no picker, nothing to select — the vendor's route
+// optimizer needs a real destination and time to plan deliveries at all,
+// but "where" doesn't need to be asked when the phone already knows.
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
 
@@ -22,16 +25,59 @@ class _CartScreenState extends State<CartScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _locationService = LocationService();
 
-  Location? _selectedBuilding;
+  Location? _customerLocation;
+  bool _isLocating = false;
+  String? _locationError;
+
   TimeOfDay? _selectedTime;
   bool _isPlacingOrder = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Captured as soon as the screen opens, so it's ready by the time
+    // they tap "Place order" — no extra wait, no picker to fill in.
+    _captureLocation();
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
     super.dispose();
+  }
+
+  Future<void> _captureLocation() async {
+    setState(() {
+      _isLocating = true;
+      _locationError = null;
+    });
+    final location = await _locationService.getCurrentLocation();
+    if (!mounted) return;
+    setState(() {
+      _isLocating = false;
+      if (location == null) {
+        _locationError =
+            'Could not detect your location — check that location access is '
+            'allowed for this app, then try again.';
+      } else {
+        // Just the raw captured position — no attempt to guess which
+        // named building it's closest to. That guess was the actual
+        // source of wrong labels before (e.g. "Near Freedom Square"
+        // when the customer was really at Nkrumah Hall); the routing
+        // math was always using the precise coordinates regardless, so
+        // dropping the label doesn't lose any accuracy — it just stops
+        // presenting an estimate as if it were a confirmed fact.
+        _customerLocation = Location(
+          id: 'customer_${DateTime.now().millisecondsSinceEpoch}',
+          name: "Customer's location",
+          latitude: location.latitude,
+          longitude: location.longitude,
+        );
+      }
+    });
   }
 
   Future<void> _pickTime() async {
@@ -51,9 +97,19 @@ class _CartScreenState extends State<CartScreen> {
   Future<void> _makeOrder() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedBuilding == null) {
+    if (_customerLocation == null) {
+      // Try once more before giving up — covers the case where GPS
+      // wasn't ready yet when the screen first opened.
+      await _captureLocation();
+    }
+    if (_customerLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose a delivery building')),
+        const SnackBar(
+          content: Text(
+            'Could not detect your location — please check location '
+            'permissions and try again',
+          ),
+        ),
       );
       return;
     }
@@ -129,7 +185,7 @@ class _CartScreenState extends State<CartScreen> {
         'createdAt': FieldValue.serverTimestamp(),
         // These two are what the vendor's route optimizer actually needs —
         // without them there's no destination or timing to plan around.
-        'deliveryLocation': _selectedBuilding!.toMap(),
+        'deliveryLocation': _customerLocation!.toMap(),
         'preferredTime': Timestamp.fromDate(preferredTime),
       });
 
@@ -329,25 +385,15 @@ class _CartScreenState extends State<CartScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // 📍 Delivery building — this is what the
-                        // vendor's route optimizer plans stops around.
-                        DropdownButtonFormField<Location>(
-                          initialValue: _selectedBuilding,
-                          decoration: const InputDecoration(
-                            labelText: 'Deliver to',
-                            prefixIcon: Icon(Icons.location_on_outlined),
-                            border: OutlineInputBorder(),
-                          ),
-                          items: CampusLocations.buildings
-                              .map(
-                                (b) => DropdownMenuItem(
-                                  value: b,
-                                  child: Text(b.name),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (b) =>
-                              setState(() => _selectedBuilding = b),
+                        // 📍 Delivery location — captured automatically
+                        // from device GPS, nothing to pick. This is what
+                        // the vendor's route optimizer plans stops
+                        // around.
+                        LocationStatus(
+                          isLocating: _isLocating,
+                          location: _customerLocation,
+                          error: _locationError,
+                          onRetry: _captureLocation,
                         ),
                         const SizedBox(height: 12),
 

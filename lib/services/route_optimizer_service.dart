@@ -1,8 +1,7 @@
 import '../models/location.dart';
 import '../models/order_model.dart';
-import '../models/route_hazard.dart';
 import '../utils/constants.dart';
-import 'hazard_service.dart';
+import 'osrm_service.dart';
 import 'traffic_service.dart';
 import 'weather_service.dart';
 
@@ -19,16 +18,20 @@ class RouteStop {
   final double distanceFromPreviousKm;
   final DateTime estimatedArrival;
   final bool isAtRiskOfLateness;
-  final double hazardPenaltyMinutes;
   final String reasonNote;
+
+  /// Whether this stop's distance/time came from a real OSRM road route
+  /// (true) or the straight-line Haversine fallback (false) — shown in
+  /// the UI so the vendor knows how much to trust a given ETA.
+  final bool usedRealRoadData;
 
   const RouteStop({
     required this.order,
     required this.distanceFromPreviousKm,
     required this.estimatedArrival,
     required this.isAtRiskOfLateness,
-    required this.hazardPenaltyMinutes,
     required this.reasonNote,
+    this.usedRealRoadData = false,
   });
 }
 
@@ -41,16 +44,18 @@ class TimeWindowGroup {
       stops.fold(0.0, (sum, s) => sum + s.distanceFromPreviousKm);
 }
 
+/// Everything here comes from a sensor, a clock, or a routing engine —
+/// nothing the vendor has to type in. Weather from the weather API,
+/// traffic from the traffic API (when configured), real road distances
+/// from OSRM, time-of-day from the device clock.
 class RouteConditions {
   final WeatherCondition weather;
   final double trafficMultiplier;
-  final List<RouteHazard> activeHazards;
   final DateTime computedAt;
 
   const RouteConditions({
     required this.weather,
     required this.trafficMultiplier,
-    required this.activeHazards,
     required this.computedAt,
   });
 
@@ -85,37 +90,51 @@ class RoutePlan {
   List<RouteStop> get flatStops => windows.expand((w) => w.stops).toList();
   List<RouteStop> get atRiskStops =>
       flatStops.where((s) => s.isAtRiskOfLateness).toList();
+
+  /// How many stops actually got real road distances vs the straight-line
+  /// fallback — a quick honesty check on how much of this plan to trust.
+  int get stopsWithRealRoadData =>
+      flatStops.where((s) => s.usedRealRoadData).length;
 }
 
-/// Builds the vendor's delivery plan out of pending orders.
+/// Builds the vendor's delivery plan out of pending orders — fully
+/// automatic, no vendor input anywhere in this pipeline.
 ///
 /// 1. GROUP BY TIME — orders needed around the same time batch together.
-/// 2. SEQUENCE BY COST, NOT JUST DISTANCE — nearest-neighbour then 2-opt
-///    local search over (travel time + hazard penalty), fixing greedy
-///    nearest-neighbour's known weakness of painting itself into a bad
-///    corner. This is the one genuine algorithm here, not an API call.
-/// 3. WEATHER + TRAFFIC REFINE TIMING, NOT ORDER — a citywide slowdown
-///    affects every stop equally, so it changes ETA accuracy, not which
-///    route is shortest.
+/// 2. SEQUENCE BY REAL ROAD COST — for each time-window, one OSRM Table
+///    call fetches a full pairwise matrix of real road distances/
+///    durations between every stop in that batch (not a straight line —
+///    actual streets and footpaths). Nearest-neighbour then 2-opt local
+///    search run against that real-cost matrix, fixing greedy nearest-
+///    neighbour's known weakness of painting itself into a bad corner.
+///    If OSRM's free public server is unreachable for a given window
+///    (it's a best-effort demo service, not a guaranteed SLA), that
+///    window quietly falls back to straight-line distance instead of
+///    breaking route planning — every stop's `usedRealRoadData` flag
+///    says honestly which case applied.
+/// 3. WEATHER + TRAFFIC REFINE TIMING, NOT ORDER — both fetched
+///    automatically; a citywide slowdown affects every stop equally, so
+///    it changes ETA accuracy, not which route is shortest.
 /// 4. ADVISORIES turn all of the above into plain "what should I actually
-///    do" answers — including the emergency/adverse-condition cases
-///    (storms, night delivery, an overloaded batch) rather than leaving
-///    the vendor to interpret numbers herself.
+///    do" answers — storms, night delivery, an overloaded batch, orders
+///    at risk of lateness — computed automatically, never asked of the
+///    vendor.
 /// 5. CHEAPEST INSERTION lets a new order that arrives mid-route slot
-///    into the *existing* plan instantly, without repeating weather/
-///    traffic/hazard lookups or a full re-optimization.
+///    into the *existing* plan instantly, using straight-line distance
+///    (no new network calls, by design — a full "refresh" reconciles it
+///    with real road data afterward).
 class RouteOptimizerService {
-  final HazardService _hazardService;
   final WeatherService _weatherService;
   final TrafficService _trafficService;
+  final OsrmService _osrmService;
 
   RouteOptimizerService({
-    HazardService? hazardService,
     WeatherService? weatherService,
     TrafficService? trafficService,
-  }) : _hazardService = hazardService ?? HazardService(),
-       _weatherService = weatherService ?? WeatherService(),
-       _trafficService = trafficService ?? TrafficService();
+    OsrmService? osrmService,
+  }) : _weatherService = weatherService ?? WeatherService(),
+       _trafficService = trafficService ?? TrafficService(),
+       _osrmService = osrmService ?? OsrmService();
 
   Future<RoutePlan> buildDeliveryPlan(
     List<FoodOrder> pendingOrders, {
@@ -125,12 +144,6 @@ class RouteOptimizerService {
     final now = DateTime.now();
     final isNightNow = now.hour >= 19 || now.hour < 6;
 
-    List<RouteHazard> hazards;
-    try {
-      hazards = await _hazardService.getActiveHazards();
-    } catch (_) {
-      hazards = const [];
-    }
     final weather = await _weatherService.getCurrentConditions(vendorStart);
     final trafficMultiplier = await _trafficService.getTrafficMultiplier(
       origin: vendorStart,
@@ -140,36 +153,11 @@ class RouteOptimizerService {
     final conditions = RouteConditions(
       weather: weather,
       trafficMultiplier: trafficMultiplier,
-      activeHazards: hazards,
       computedAt: now,
     );
 
     if (pendingOrders.isEmpty) {
       return RoutePlan(windows: const [], conditions: conditions);
-    }
-
-    double hazardPenaltyFor(Location location) {
-      double total = 0;
-      for (final hazard in hazards) {
-        if (hazard.isNear(location)) {
-          total += hazard.penaltyMinutes(
-            isRainingNow: weather.isRaining || weather.isStorming,
-            isNightNow: isNightNow,
-          );
-        }
-      }
-      return total;
-    }
-
-    String reasonFor({required bool isFirst, required double hazardPenalty}) {
-      if (hazardPenalty > 0) {
-        return isFirst
-            ? 'Closest stop, but has a flagged hazard nearby — extra time added'
-            : 'Next closest available stop, with a flagged hazard nearby';
-      }
-      return isFirst
-          ? 'Closest stop to your starting point'
-          : 'Next closest stop after the previous delivery';
     }
 
     final groupedByWindow = _groupByTimeWindow(pendingOrders, windowSize);
@@ -181,22 +169,49 @@ class RouteOptimizerService {
 
     for (final windowStart in windowStarts) {
       final ordersInWindow = groupedByWindow[windowStart]!;
+
+      // One network call per batch — a real distance/duration matrix
+      // between the vendor's current position and every stop in this
+      // window, in one shot. Falls back to null (handled gracefully
+      // everywhere below) if OSRM's free demo server can't answer.
+      final windowLocations = [
+        currentPosition,
+        ...ordersInWindow.map((o) => o.deliveryLocation),
+      ];
+      final matrix = await _osrmService.getDistanceMatrix(windowLocations);
+
+      double costMinutes(Location from, Location to) {
+        final real = matrix?.durationMinutes(from, to);
+        if (real != null) return real;
+        return (from.distanceToKm(to) / AppConfig.assumedSpeedKmh) * 60;
+      }
+
       var sequenced = _nearestNeighbourRoute(
         ordersInWindow,
         currentPosition,
-        hazardPenaltyFor,
+        costMinutes,
       );
-      sequenced = _twoOptImprove(sequenced, currentPosition, hazardPenaltyFor);
+      sequenced = _twoOptImprove(sequenced, currentPosition, costMinutes);
 
       final stops = <RouteStop>[];
       for (var i = 0; i < sequenced.length; i++) {
         final order = sequenced[i];
-        final distanceKm = currentPosition.distanceToKm(order.deliveryLocation);
-        final hazardPenalty = hazardPenaltyFor(order.deliveryLocation);
-        final travelMinutes =
-            (distanceKm / AppConfig.assumedSpeedKmh) * 60 * trafficMultiplier;
+        final realDistanceKm = matrix?.distanceKm(
+          currentPosition,
+          order.deliveryLocation,
+        );
+        final distanceKm =
+            realDistanceKm ??
+            currentPosition.distanceToKm(order.deliveryLocation);
+        final usedReal = realDistanceKm != null;
+
+        final baseTravelMinutes = costMinutes(
+          currentPosition,
+          order.deliveryLocation,
+        );
         final totalMinutes =
-            travelMinutes + hazardPenalty + weather.penaltyMinutesPerStop;
+            baseTravelMinutes * trafficMultiplier +
+            weather.penaltyMinutesPerStop;
         final arrival = currentTime.add(
           Duration(minutes: totalMinutes.round()),
         );
@@ -209,11 +224,14 @@ class RouteOptimizerService {
             distanceFromPreviousKm: distanceKm,
             estimatedArrival: arrival,
             isAtRiskOfLateness: atRisk,
-            hazardPenaltyMinutes: hazardPenalty,
-            reasonNote: reasonFor(
-              isFirst: i == 0,
-              hazardPenalty: hazardPenalty,
-            ),
+            usedRealRoadData: usedReal,
+            reasonNote: i == 0
+                ? (usedReal
+                      ? 'Closest stop by real road distance from your starting point'
+                      : 'Closest stop to your starting point (estimated)')
+                : (usedReal
+                      ? 'Next closest stop by real road distance'
+                      : 'Next closest stop after the previous delivery (estimated)'),
           ),
         );
 
@@ -230,8 +248,6 @@ class RouteOptimizerService {
         : windows.map((w) => w.stops.length).reduce((a, b) => a > b ? a : b);
     final advisories = _generateAdvisories(
       weather: weather,
-      trafficMultiplier: trafficMultiplier,
-      hazards: hazards,
       totalStops: allStops.length,
       atRiskCount: atRiskCount,
       isNightNow: isNightNow,
@@ -239,13 +255,11 @@ class RouteOptimizerService {
     );
     final suggestedDelay = _suggestedDelayMinutes(
       weather,
-      hazards,
       atRiskCount,
       allStops.length,
     );
     final healthScore = _computeHealthScore(
       weather: weather,
-      hazardCount: hazards.length,
       atRiskCount: atRiskCount,
       totalStops: allStops.length,
     );
@@ -261,7 +275,6 @@ class RouteOptimizerService {
 
   int _computeHealthScore({
     required WeatherCondition weather,
-    required int hazardCount,
     required int atRiskCount,
     required int totalStops,
   }) {
@@ -271,7 +284,6 @@ class RouteOptimizerService {
     } else if (weather.isRaining) {
       score -= 15;
     }
-    score -= hazardCount * 5;
     if (totalStops > 0) {
       final atRiskRatio = atRiskCount / totalStops;
       score -= (atRiskRatio * 40).round();
@@ -281,8 +293,6 @@ class RouteOptimizerService {
 
   List<AdvisoryMessage> _generateAdvisories({
     required WeatherCondition weather,
-    required double trafficMultiplier,
-    required List<RouteHazard> hazards,
     required int totalStops,
     required int atRiskCount,
     required bool isNightNow,
@@ -335,19 +345,6 @@ class RouteOptimizerService {
       );
     }
 
-    if (hazards.isNotEmpty) {
-      final names = hazards.map((h) => h.description).take(2).join('; ');
-      advisories.add(
-        AdvisoryMessage(
-          severity: AdvisorySeverity.warning,
-          message:
-              '${hazards.length} flagged hazard(s) near this route ($names'
-              '${hazards.length > 2 ? ', and more' : ''}) — extra time is '
-              'already built into the affected stops below.',
-        ),
-      );
-    }
-
     if (totalStops > 0 && atRiskCount == totalStops) {
       advisories.add(
         const AdvisoryMessage(
@@ -382,7 +379,6 @@ class RouteOptimizerService {
 
   int _suggestedDelayMinutes(
     WeatherCondition weather,
-    List<RouteHazard> hazards,
     int atRiskCount,
     int totalStops,
   ) {
@@ -392,13 +388,11 @@ class RouteOptimizerService {
     return 0;
   }
 
-  /// Slots a new order into an *already-built* plan — the "emergency,
-  /// mid-route" case: a fresh order arrives while she's already out
-  /// delivering. Reuses the conditions already fetched for [currentPlan]
-  /// instead of repeating weather/traffic/hazard lookups, and finds the
-  /// cheapest gap to insert into (classic cheapest-insertion heuristic).
-  /// Only the affected window's ETAs are refreshed; a full "refresh"
-  /// still reruns the complete pipeline whenever she wants full accuracy.
+  /// Slots a new order into an *already-built* plan — a fresh order
+  /// arrives while she's already out delivering. Deliberately stays on
+  /// straight-line distance rather than fetching a new OSRM matrix, so
+  /// this stays instant with zero network calls; the next full "refresh"
+  /// reconciles it against real road data along with everything else.
   RoutePlan insertOrderIntoPlan(
     RoutePlan currentPlan,
     FoodOrder newOrder, {
@@ -406,21 +400,9 @@ class RouteOptimizerService {
     Duration windowSize = AppConfig.deliveryWindowSize,
   }) {
     final conditions = currentPlan.conditions;
-    final isNightNow =
-        conditions.computedAt.hour >= 19 || conditions.computedAt.hour < 6;
 
-    double hazardPenaltyFor(Location location) {
-      double total = 0;
-      for (final hazard in conditions.activeHazards) {
-        if (hazard.isNear(location)) {
-          total += hazard.penaltyMinutes(
-            isRainingNow:
-                conditions.weather.isRaining || conditions.weather.isStorming,
-            isNightNow: isNightNow,
-          );
-        }
-      }
-      return total;
+    double costMinutes(Location from, Location to) {
+      return (from.distanceToKm(to) / AppConfig.assumedSpeedKmh) * 60;
     }
 
     final t = newOrder.preferredTime;
@@ -441,13 +423,11 @@ class RouteOptimizerService {
 
     if (matchIndex == -1) {
       final distanceKm = vendorStart.distanceToKm(newOrder.deliveryLocation);
-      final hazardPenalty = hazardPenaltyFor(newOrder.deliveryLocation);
       final travelMinutes =
-          (distanceKm / AppConfig.assumedSpeedKmh) *
-          60 *
+          costMinutes(vendorStart, newOrder.deliveryLocation) *
           conditions.trafficMultiplier;
       final arrival = newOrderWindowStart.add(
-        Duration(minutes: (travelMinutes + hazardPenalty).round()),
+        Duration(minutes: travelMinutes.round()),
       );
 
       final newWindow = TimeWindowGroup(
@@ -460,8 +440,8 @@ class RouteOptimizerService {
             isAtRiskOfLateness:
                 arrival.difference(newOrder.preferredTime).inMinutes >
                 AppConfig.latenessGraceMinutes,
-            hazardPenaltyMinutes: hazardPenalty,
-            reasonNote: 'New order — added to a fresh batch for this time',
+            reasonNote:
+                'New order — added to a fresh batch for this time (estimated)',
           ),
         ],
       );
@@ -502,16 +482,10 @@ class RouteOptimizerService {
       final afterExists = i < existingLocations.length - 1;
       final after = afterExists ? existingLocations[i + 1] : null;
 
-      final costWithout = afterExists
-          ? _stopCost(before, after!, hazardPenaltyFor)
-          : 0.0;
-      final costBeforeNew = _stopCost(
-        before,
-        newOrder.deliveryLocation,
-        hazardPenaltyFor,
-      );
+      final costWithout = afterExists ? costMinutes(before, after!) : 0.0;
+      final costBeforeNew = costMinutes(before, newOrder.deliveryLocation);
       final costNewAfter = afterExists
-          ? _stopCost(newOrder.deliveryLocation, after!, hazardPenaltyFor)
+          ? costMinutes(newOrder.deliveryLocation, after!)
           : 0.0;
 
       final extraCost = costBeforeNew + costNewAfter - costWithout;
@@ -534,15 +508,11 @@ class RouteOptimizerService {
     for (var i = 0; i < newOrderSequence.length; i++) {
       final order = newOrderSequence[i];
       final distanceKm = current.distanceToKm(order.deliveryLocation);
-      final hazardPenalty = hazardPenaltyFor(order.deliveryLocation);
       final travelMinutes =
-          (distanceKm / AppConfig.assumedSpeedKmh) *
-          60 *
+          costMinutes(current, order.deliveryLocation) *
           conditions.trafficMultiplier;
       final totalMinutes =
-          travelMinutes +
-          hazardPenalty +
-          conditions.weather.penaltyMinutesPerStop;
+          travelMinutes + conditions.weather.penaltyMinutesPerStop;
       final arrival = currentTime.add(Duration(minutes: totalMinutes.round()));
 
       rebuiltStops.add(
@@ -553,12 +523,11 @@ class RouteOptimizerService {
           isAtRiskOfLateness:
               arrival.difference(order.preferredTime).inMinutes >
               AppConfig.latenessGraceMinutes,
-          hazardPenaltyMinutes: hazardPenalty,
           reasonNote: order.id == newOrder.id
-              ? 'New order — slotted in at the cheapest point in this batch'
+              ? 'New order — slotted in at the cheapest point in this batch (estimated)'
               : rebuiltStops.isEmpty
-              ? 'Closest stop to your starting point'
-              : 'Next closest stop after the previous delivery',
+              ? 'Closest stop to your starting point (estimated)'
+              : 'Next closest stop after the previous delivery (estimated)',
         ),
       );
 
@@ -601,31 +570,20 @@ class RouteOptimizerService {
     return map;
   }
 
-  double _stopCost(
-    Location from,
-    Location to,
-    double Function(Location) hazardPenaltyFor,
-  ) {
-    final travelMinutes =
-        (from.distanceToKm(to) / AppConfig.assumedSpeedKmh) * 60;
-    return travelMinutes + hazardPenaltyFor(to);
-  }
-
   List<FoodOrder> _nearestNeighbourRoute(
     List<FoodOrder> orders,
     Location startPosition,
-    double Function(Location) hazardPenaltyFor,
+    double Function(Location, Location) costMinutes,
   ) {
     final remaining = List<FoodOrder>.from(orders);
     final route = <FoodOrder>[];
     Location current = startPosition;
     while (remaining.isNotEmpty) {
       remaining.sort(
-        (a, b) => _stopCost(
+        (a, b) => costMinutes(
           current,
           a.deliveryLocation,
-          hazardPenaltyFor,
-        ).compareTo(_stopCost(current, b.deliveryLocation, hazardPenaltyFor)),
+        ).compareTo(costMinutes(current, b.deliveryLocation)),
       );
       final next = remaining.removeAt(0);
       route.add(next);
@@ -637,7 +595,7 @@ class RouteOptimizerService {
   List<FoodOrder> _twoOptImprove(
     List<FoodOrder> route,
     Location startPosition,
-    double Function(Location) hazardPenaltyFor,
+    double Function(Location, Location) costMinutes,
   ) {
     if (route.length < 3) return route;
 
@@ -645,7 +603,7 @@ class RouteOptimizerService {
       var cost = 0.0;
       var current = startPosition;
       for (final order in r) {
-        cost += _stopCost(current, order.deliveryLocation, hazardPenaltyFor);
+        cost += costMinutes(current, order.deliveryLocation);
         current = order.deliveryLocation;
       }
       return cost;

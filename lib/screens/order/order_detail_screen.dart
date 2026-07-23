@@ -3,8 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'food_item.dart';
 import '../../services/cart_service.dart';
-import '../../services/cart_screen.dart';
+import 'cart_screen.dart';
 import '../../services/auth_service.dart';
+import '../../services/location_service.dart';
+import '../../models/location.dart';
+import '../../utils/constants.dart';
+import '../../widgets/location_status.dart';
 
 // The STANDARD order screen — used by every category EXCEPT Main
 // Courses (Breakfast, Drinks, Popular, Vegetarian all import this).
@@ -28,10 +32,59 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   late final TextEditingController _quantityController;
   bool _isPlacingOrder = false;
 
+  // Delivery location + time — captured automatically, same pattern as
+  // cart_screen.dart. This screen places an order directly (skipping
+  // the cart), so it needs its own copy of this.
+  final _locationService = LocationService();
+  Location? _customerLocation;
+  bool _isLocating = false;
+  String? _locationError;
+  TimeOfDay? _selectedTime;
+
   @override
   void initState() {
     super.initState();
     _quantityController = TextEditingController(text: _quantity.toString());
+    _captureLocation();
+  }
+
+  Future<void> _captureLocation() async {
+    setState(() {
+      _isLocating = true;
+      _locationError = null;
+    });
+    final location = await _locationService.getCurrentLocation();
+    if (!mounted) return;
+    setState(() {
+      _isLocating = false;
+      if (location == null) {
+        _locationError =
+            'Could not detect your location — check that location access is '
+            'allowed for this app, then try again.';
+      } else {
+        // Just the raw captured position — no attempt to guess which
+        // named building it's closest to. That guess was the actual
+        // source of wrong labels before (e.g. "Near Freedom Square"
+        // when the customer was really at Nkrumah Hall); the routing
+        // math was always using the precise coordinates regardless, so
+        // dropping the label doesn't lose any accuracy — it just stops
+        // presenting an estimate as if it were a confirmed fact.
+        _customerLocation = Location(
+          id: 'customer_${DateTime.now().millisecondsSinceEpoch}',
+          name: "Customer's location",
+          latitude: location.latitude,
+          longitude: location.longitude,
+        );
+      }
+    });
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked != null) setState(() => _selectedTime = picked);
   }
 
   @override
@@ -89,7 +142,40 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       return;
     }
 
+    if (_customerLocation == null) {
+      await _captureLocation();
+    }
+    if (_customerLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not detect your location — please check location '
+            'permissions and try again',
+          ),
+        ),
+      );
+      return;
+    }
+    if (_selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose a preferred time')),
+      );
+      return;
+    }
+
     setState(() => _isPlacingOrder = true);
+
+    final now = DateTime.now();
+    var preferredTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _selectedTime!.hour,
+      _selectedTime!.minute,
+    );
+    if (preferredTime.isBefore(now)) {
+      preferredTime = preferredTime.add(const Duration(days: 1));
+    }
 
     try {
       await FirebaseFirestore.instance.collection('orders').add({
@@ -105,6 +191,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         'total': _total,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
+        'deliveryLocation': _customerLocation!.toMap(),
+        'preferredTime': Timestamp.fromDate(preferredTime),
       });
 
       if (!mounted) return;
@@ -154,7 +242,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
@@ -220,13 +308,37 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               ],
             ),
 
+            const SizedBox(height: 20),
+            LocationStatus(
+              isLocating: _isLocating,
+              location: _customerLocation,
+              error: _locationError,
+              onRetry: _captureLocation,
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _pickTime,
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Preferred time',
+                  prefixIcon: Icon(Icons.access_time),
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(
+                  _selectedTime == null
+                      ? 'Choose a time'
+                      : _selectedTime!.format(context),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 24),
             Text(
               'Total: UGX ${_total.toStringAsFixed(0)}',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
 
-            const Spacer(),
+            const SizedBox(height: 16),
 
             Row(
               children: [
