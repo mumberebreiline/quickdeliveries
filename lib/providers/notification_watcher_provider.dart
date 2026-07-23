@@ -35,46 +35,65 @@ class NotificationWatcherProvider extends ChangeNotifier {
   void startVendorWatcher() {
     if (_vendorSub != null) return; // already running
     _lastSeenActiveOrderIds = null;
-    _vendorSub = OrderService.streamActiveOrdersForVendor().listen((orders) {
-      final currentIds = orders.map((o) => o.id).toSet();
+    _vendorSub = OrderService.streamActiveOrdersForVendor().listen(
+      (orders) {
+        final currentIds = orders.map((o) => o.id).toSet();
 
-      // Skip the very first snapshot — otherwise every order that
-      // already existed when she opened the app would look "new."
-      if (_lastSeenActiveOrderIds != null) {
-        final newIds = currentIds.difference(_lastSeenActiveOrderIds!);
-        for (final order in orders.where((o) => newIds.contains(o.id))) {
-          final name = order.customerName.isEmpty
-              ? 'A customer'
-              : order.customerName;
-          _notifications.show(
-            title: 'New order!',
-            body: '$name just placed an order — ${order.deliveryLocation.name}',
-          );
+        // Skip the very first snapshot — otherwise every order that
+        // already existed when she opened the app would look "new."
+        if (_lastSeenActiveOrderIds != null) {
+          final newIds = currentIds.difference(_lastSeenActiveOrderIds!);
+          for (final order in orders.where((o) => newIds.contains(o.id))) {
+            final name = order.customerName.isEmpty
+                ? 'A customer'
+                : order.customerName;
+            _notifications.show(
+              title: 'New order!',
+              body: '$name just placed an order — ${order.deliveryLocation.name}',
+            );
+          }
         }
-      }
-      _lastSeenActiveOrderIds = currentIds;
-    });
+        _lastSeenActiveOrderIds = currentIds;
+      },
+      onError: (Object error) {
+        // This watcher has no screen of its own to show an error on —
+        // without this, a Firestore problem (most commonly a missing
+        // composite index) would fail completely silently, forever,
+        // with zero way to know why notifications stopped arriving.
+        // ignore: avoid_print
+        print('Vendor notification watcher error: $error');
+      },
+    );
   }
 
   void startCustomerWatcher() {
     if (_customerSub != null) return; // already running
     _lastSeenStatusByOrderId = null;
-    _customerSub = OrderService.streamMyOrders().listen((orders) {
-      final currentStatusById = {for (final o in orders) o.id: o.status};
+    _customerSub = OrderService.streamMyOrders().listen(
+      (orders) {
+        final currentStatusById = {for (final o in orders) o.id: o.status};
 
-      if (_lastSeenStatusByOrderId != null) {
-        for (final order in orders) {
-          final previousStatus = _lastSeenStatusByOrderId![order.id];
-          if (previousStatus != null && previousStatus != order.status) {
-            _notifications.show(
-              title: 'Order update',
-              body: 'Your order is now: ${_friendlyStatus(order.status)}',
-            );
+        if (_lastSeenStatusByOrderId != null) {
+          for (final order in orders) {
+            final previousStatus = _lastSeenStatusByOrderId![order.id];
+            if (previousStatus != null && previousStatus != order.status) {
+              _notifications.show(
+                title: 'Order update',
+                body: 'Your order is now: ${_friendlyStatus(order.status)}',
+              );
+            }
           }
         }
-      }
-      _lastSeenStatusByOrderId = currentStatusById;
-    });
+        _lastSeenStatusByOrderId = currentStatusById;
+      },
+      onError: (Object error) {
+        // Same reasoning as the vendor watcher above — no screen to
+        // surface this on, so at minimum it needs to be visible in the
+        // debug console rather than vanishing silently.
+        // ignore: avoid_print
+        print('Customer notification watcher error: $error');
+      },
+    );
   }
 
   void stopVendorWatcher() {

@@ -9,7 +9,7 @@ import '../../../utils/constants.dart';
 import '../../../widgets/location_status.dart';
 
 // Shows everything currently in the cart, with a running total
-// calculated from ALL items. Asks for the customer's name, phone number,
+// calculated from ALL items. Asks for the customer's name, phone number,2
 // and preferred time. Delivery location is captured automatically from
 // device GPS — no picker, nothing to select — the vendor's route
 // optimizer needs a real destination and time to plan deliveries at all,
@@ -54,30 +54,25 @@ class _CartScreenState extends State<CartScreen> {
       _isLocating = true;
       _locationError = null;
     });
-    final location = await _locationService.getCurrentLocation();
-    if (!mounted) return;
-    setState(() {
-      _isLocating = false;
-      if (location == null) {
-        _locationError =
-            'Could not detect your location — check that location access is '
-            'allowed for this app, then try again.';
-      } else {
-        // Just the raw captured position — no attempt to guess which
-        // named building it's closest to. That guess was the actual
-        // source of wrong labels before (e.g. "Near Freedom Square"
-        // when the customer was really at Nkrumah Hall); the routing
-        // math was always using the precise coordinates regardless, so
-        // dropping the label doesn't lose any accuracy — it just stops
-        // presenting an estimate as if it were a confirmed fact.
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+      setState(() {
+        _isLocating = false;
         _customerLocation = Location(
           id: 'customer_${DateTime.now().millisecondsSinceEpoch}',
-          name: "Customer's location",
+          name: location.name,
           latitude: location.latitude,
           longitude: location.longitude,
         );
-      }
-    });
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLocating = false;
+        _locationError = e.toString();
+      });
+    }
   }
 
   Future<void> _pickTime() async {
@@ -88,12 +83,11 @@ class _CartScreenState extends State<CartScreen> {
     if (picked != null) setState(() => _selectedTime = picked);
   }
 
-  // ============================================================
-  // ✅ MAKE ORDER — validates the phone number and delivery details,
+  
+  //MAKE ORDER — validates the phone number and delivery details,
   // takes everything currently in the cart, saves it as ONE order
   // document in Firestore (with the total calculated across all
   // items), then empties the cart.
-  // ============================================================
   Future<void> _makeOrder() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -362,7 +356,7 @@ class _CartScreenState extends State<CartScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // 📞 Phone number — required so the vendor can
+                        // Phone number — required so the vendor can
                         // reach the customer about this order.
                         TextFormField(
                           controller: _phoneController,
@@ -385,7 +379,7 @@ class _CartScreenState extends State<CartScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // 📍 Delivery location — captured automatically
+                        //  Delivery location — captured automatically
                         // from device GPS, nothing to pick. This is what
                         // the vendor's route optimizer plans stops
                         // around.
@@ -397,7 +391,7 @@ class _CartScreenState extends State<CartScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // 🕒 Preferred time — the other half of what the
+                        //  Preferred time — the other half of what the
                         // route optimizer needs to batch and sequence
                         // deliveries.
                         InkWell(
