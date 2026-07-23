@@ -53,30 +53,25 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       _isLocating = true;
       _locationError = null;
     });
-    final location = await _locationService.getCurrentLocation();
-    if (!mounted) return;
-    setState(() {
-      _isLocating = false;
-      if (location == null) {
-        _locationError =
-            'Could not detect your location — check that location access is '
-            'allowed for this app, then try again.';
-      } else {
-        // Just the raw captured position — no attempt to guess which
-        // named building it's closest to. That guess was the actual
-        // source of wrong labels before (e.g. "Near Freedom Square"
-        // when the customer was really at Nkrumah Hall); the routing
-        // math was always using the precise coordinates regardless, so
-        // dropping the label doesn't lose any accuracy — it just stops
-        // presenting an estimate as if it were a confirmed fact.
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+      setState(() {
+        _isLocating = false;
         _customerLocation = Location(
           id: 'customer_${DateTime.now().millisecondsSinceEpoch}',
-          name: "Customer's location",
+          name: location.name,
           latitude: location.latitude,
           longitude: location.longitude,
         );
-      }
-    });
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLocating = false;
+        _locationError = e.toString();
+      });
+    }
   }
 
   Future<void> _pickTime() async {
