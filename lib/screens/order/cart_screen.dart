@@ -356,7 +356,7 @@ class _CartScreenState extends State<CartScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // 📞 Phone number — required so the vendor can
+                        // Phone number — required so the vendor can
                         // reach the customer about this order.
                         TextFormField(
                           controller: _phoneController,
