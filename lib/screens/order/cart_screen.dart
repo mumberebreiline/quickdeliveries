@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../services/cart_service.dart';
-import '../../services/auth_service.dart';
-import '../../services/location_service.dart';
-import '../../models/location.dart';
-import '../../utils/constants.dart';
-import '../../widgets/location_status.dart';
+import '../../../services/cart_service.dart';
+import '../../../services/auth_service.dart';
+import '../../../services/location_service.dart';
+import '../../../models/location.dart';
+import '../../../utils/constants.dart';
+import '../../../widgets/location_status.dart';
 
 // Shows everything currently in the cart, with a running total
 // calculated from ALL items. Asks for the customer's name, phone number,2
