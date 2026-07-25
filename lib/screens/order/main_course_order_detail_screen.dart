@@ -1,14 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'food_item.dart';
 import '../../services/cart_service.dart';
 import 'cart_screen.dart';
-import '../../services/auth_service.dart';
-import '../../services/location_service.dart';
-import '../../models/location.dart';
-import '../../utils/constants.dart';
-import '../../widgets/location_status.dart';
 
 class MainCourseOrderDetailScreen extends StatefulWidget {
   final FoodItem food;
@@ -20,6 +14,14 @@ class MainCourseOrderDetailScreen extends StatefulWidget {
       _MainCourseOrderDetailScreenState();
 }
 
+// Quantity, accompaniments, and the food picture/details are the only
+// things this screen still handles directly. Delivery location,
+// preferred time, phone number, and the actual Firestore write all
+// happen on CartScreen now — both "ADD TO CART" and "MAKE ORDER" just
+// get the selection into the cart correctly and let CartScreen do the
+// rest, the same way every other category's detail screen already
+// works. That's what keeps this logic written in exactly one place
+// instead of two slightly-different copies of the same thing.
 class _MainCourseOrderDetailScreenState
     extends State<MainCourseOrderDetailScreen> {
   int _quantity = 1;
@@ -27,53 +29,10 @@ class _MainCourseOrderDetailScreenState
 
   final List<Map<String, dynamic>> _selectedAccompaniments = [];
 
-  bool _isPlacingOrder = false;
-
-  final _locationService = LocationService();
-  Location? _customerLocation;
-  bool _isLocating = false;
-  String? _locationError;
-  TimeOfDay? _selectedTime;
-
   @override
   void initState() {
     super.initState();
     _quantityController = TextEditingController(text: _quantity.toString());
-    _captureLocation();
-  }
-
-  Future<void> _captureLocation() async {
-    setState(() {
-      _isLocating = true;
-      _locationError = null;
-    });
-    try {
-      final location = await _locationService.getCurrentLocation();
-      if (!mounted) return;
-      setState(() {
-        _isLocating = false;
-        _customerLocation = Location(
-          id: 'customer_${DateTime.now().millisecondsSinceEpoch}',
-          name: location.name,
-          latitude: location.latitude,
-          longitude: location.longitude,
-        );
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLocating = false;
-        _locationError = e.toString();
-      });
-    }
-  }
-
-  Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-    if (picked != null) setState(() => _selectedTime = picked);
   }
 
   @override
@@ -158,108 +117,49 @@ class _MainCourseOrderDetailScreenState
 
   double get _total => (widget.food.price * _quantity) + _accompanimentsTotal;
 
+  /// Adds every selected accompaniment as its own cart line — each one
+  /// becomes a real FoodItem so CartService and CartScreen don't need
+  /// to know anything special about "accompaniments" as a concept, they
+  /// just see more items. Previously this only happened inside the old
+  /// direct-Firestore _makeOrder() — meaning using "ADD TO CART" instead
+  /// silently dropped every accompaniment. Calling this from both
+  /// buttons now fixes that too.
+  void _addAccompanimentsToCart() {
+    for (final accompaniment in _selectedAccompaniments) {
+      CartService.instance.addItem(
+        FoodItem(
+          id: accompaniment['id'] as String,
+          name: '${accompaniment['name']} (accompaniment)',
+          price: accompaniment['price'] as double,
+          imageUrl: '',
+          category: 'Accompaniment',
+        ),
+        1,
+      );
+    }
+  }
+
   void _addToCart() {
     CartService.instance.addItem(widget.food, _quantity);
+    _addAccompanimentsToCart();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$_quantity x ${widget.food.name} added to cart')),
     );
     Navigator.pop(context);
   }
 
-  Future<void> _makeOrder() async {
-    var user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      await AuthService().ensureSignedIn();
-      user = FirebaseAuth.instance.currentUser;
-    }
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not start a session — check your connection and try again',
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (_customerLocation == null) {
-      await _captureLocation();
-    }
-    if (_customerLocation == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not detect your location — please check location '
-            'permissions and try again',
-          ),
-        ),
-      );
-      return;
-    }
-    if (_selectedTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose a preferred time')),
-      );
-      return;
-    }
-
-    setState(() => _isPlacingOrder = true);
-
-    final now = DateTime.now();
-    var preferredTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      _selectedTime!.hour,
-      _selectedTime!.minute,
+  // MAKE ORDER — adds this dish and any selected accompaniments to the
+  // cart, then goes straight to CartScreen to finish there (phone
+  // number, delivery time, delivery location, and the Firestore write
+  // all happen on that one screen — same pattern as every other
+  // category now, not a separate copy of the same logic here).
+  void _makeOrder() {
+    CartService.instance.addItem(widget.food, _quantity);
+    _addAccompanimentsToCart();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const CartScreen()),
     );
-    if (preferredTime.isBefore(now)) {
-      preferredTime = preferredTime.add(const Duration(days: 1));
-    }
-
-    try {
-      final items = [
-        {
-          'foodId': widget.food.id,
-          'name': widget.food.name,
-          'price': widget.food.price,
-          'quantity': _quantity,
-        },
-        for (final accompaniment in _selectedAccompaniments)
-          {
-            'foodId': accompaniment['id'],
-            'name': '${accompaniment['name']} (accompaniment)',
-            'price': accompaniment['price'],
-            'quantity': 1,
-          },
-      ];
-
-      await FirebaseFirestore.instance.collection('orders').add({
-        'userId': user.uid,
-        'items': items,
-        'total': _total,
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-        'deliveryLocation': _customerLocation!.toMap(),
-        'preferredTime': Timestamp.fromDate(preferredTime),
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Order placed! The vendor will see it shortly.'),
-        ),
-      );
-      Navigator.pop(context);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not place order: $e')));
-    } finally {
-      if (mounted) setState(() => _isPlacingOrder = false);
-    }
   }
 
   void _openCart(BuildContext context) {
@@ -467,30 +367,6 @@ class _MainCourseOrderDetailScreenState
               ),
             ],
 
-            const SizedBox(height: 20),
-            LocationStatus(
-              isLocating: _isLocating,
-              location: _customerLocation,
-              error: _locationError,
-              onRetry: _captureLocation,
-            ),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: _pickTime,
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Preferred time',
-                  prefixIcon: Icon(Icons.access_time),
-                  border: OutlineInputBorder(),
-                ),
-                child: Text(
-                  _selectedTime == null
-                      ? 'Choose a time'
-                      : _selectedTime!.format(context),
-                ),
-              ),
-            ),
-
             const SizedBox(height: 24),
             Text(
               'Total: UGX ${_total.toStringAsFixed(0)}',
@@ -503,7 +379,7 @@ class _MainCourseOrderDetailScreenState
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _isPlacingOrder ? null : _addToCart,
+                    onPressed: _addToCart,
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.orange),
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -524,7 +400,7 @@ class _MainCourseOrderDetailScreenState
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isPlacingOrder ? null : _makeOrder,
+                    onPressed: _makeOrder,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -532,23 +408,14 @@ class _MainCourseOrderDetailScreenState
                         borderRadius: BorderRadius.circular(30),
                       ),
                     ),
-                    child: _isPlacingOrder
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text(
-                            'MAKE ORDER',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                    child: const Text(
+                      'MAKE ORDER',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
