@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../utils/validators.dart';
 import '../../widgets/custom_button.dart';
 import '../vendor/dashboard_screen.dart';
+import '../delivery/delivery_home_screen.dart';
 
 /// One login screen, one button, for both customers and the vendor.
 /// Firebase Auth doesn't distinguish account "types" on its own — after
@@ -64,10 +65,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // Same button, same call — this is the one place that decides which
     // experience to show, based purely on the account's role.
-    if (auth.role == UserRole.vendor) {
+    final role = auth.role;
+    if (role != null && role.isAdmin) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const VendorDashboardScreen()),
+      );
+    } else if (role == UserRole.deliveryGuy) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const DeliveryHomeScreen()),
       );
     } else {
       Navigator.pop(context);

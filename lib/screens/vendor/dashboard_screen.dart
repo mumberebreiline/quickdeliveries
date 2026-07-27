@@ -3,10 +3,16 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../home/login_screen.dart';
-import 'incoming_orders_screen.dart';
+import 'assign_orders_screen.dart';
 import 'route_map_screen.dart';
+import 'live_fleet_screen.dart';
 import 'delivery_history_screen.dart';
 
+/// The admin's home screen. She no longer delivers personally — her job
+/// is deciding who does, via Assign Orders. Route Overview stays around
+/// as a planning aid: the same 2-opt/weather/hazard-free routing engine
+/// as before, just used to see how a batch *would* run before deciding
+/// who to hand it to, rather than her following it herself.
 class VendorDashboardScreen extends StatelessWidget {
   const VendorDashboardScreen({super.key});
 
@@ -16,7 +22,7 @@ class VendorDashboardScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vendor Dashboard'),
+        title: const Text('Admin Dashboard'),
         backgroundColor: Colors.deepPurple,
         actions: [
           IconButton(
@@ -71,21 +77,30 @@ class VendorDashboardScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             _DashboardTile(
-              icon: Icons.inbox,
-              label: 'Incoming Orders',
-              subtitle: 'Confirm and prepare new orders',
+              icon: Icons.assignment_ind,
+              label: 'Assign Orders',
+              subtitle: 'Grouped by time — hand batches to delivery guys',
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const IncomingOrdersScreen()),
+                MaterialPageRoute(builder: (_) => const AssignOrdersScreen()),
               ),
             ),
             _DashboardTile(
               icon: Icons.map,
-              label: "Today's Route",
-              subtitle: 'Optimized delivery order and map',
+              label: 'Route Overview',
+              subtitle: 'Optimized grouping and conditions, before assigning',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const RouteMapScreen()),
+              ),
+            ),
+            _DashboardTile(
+              icon: Icons.pin_drop,
+              label: 'Live Fleet',
+              subtitle: 'See where each delivery guy is right now',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LiveFleetScreen()),
               ),
             ),
             _DashboardTile(

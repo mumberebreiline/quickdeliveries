@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
-import '../../models/location.dart';
-import '../../providers/location_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../services/maps_service.dart';
-import '../../services/directions_service.dart';
 import '../../services/route_optimizer_service.dart';
+import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/location_preview.dart';
 
@@ -23,19 +21,15 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   String? _error;
   OrderProvider? _orderProvider;
 
-  final DirectionsService _directionsService = DirectionsService();
-  // Real live-traffic road-following lines, keyed by window index — filled
-  // in after the plan loads. A window with no entry here just shows the
-  // straight-line fallback instead (drawn by MapsService.buildPolylines).
-  Map<int, Polyline> _roadPolylines = {};
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await context.read<LocationProvider>().refreshOnce();
-      _loadPlan();
-    });
+    // She's stationary now — not delivering herself anymore — so this
+    // always plans from her known, fixed base location rather than
+    // whatever her own device's GPS happens to say (which could be
+    // wherever she's checking the app from, not where deliveries
+    // actually start). "Stabilizing her in one place," as requested.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPlan());
   }
 
   @override
@@ -57,8 +51,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   void _onOrdersChanged() {
     if (_plan == null || !mounted) return;
-    final vendorLocation = context.read<LocationProvider>().currentLocation;
-    final updated = _orderProvider!.tryInsertNewOrders(vendorLocation);
+    final updated = _orderProvider!.tryInsertNewOrders(
+      CampusLocations.vendorBase,
+    );
     if (updated != null) {
       setState(() => _plan = updated);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -73,22 +68,19 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   Future<void> _loadPlan() async {
     if (!mounted) return;
     final orderProvider = context.read<OrderProvider>();
-    final locationProvider = context.read<LocationProvider>();
     setState(() {
       _isLoading = true;
       _error = null;
-      _roadPolylines = {};
     });
     try {
       final plan = await orderProvider.buildRoutePlan(
-        locationProvider.currentLocation,
+        CampusLocations.vendorBase,
       );
       if (!mounted) return;
       setState(() {
         _plan = plan;
         _isLoading = false;
       });
-      _loadRoadPolylines(plan, locationProvider.currentLocation);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -98,77 +90,13 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     }
   }
 
-  /// Draws the actual live-traffic road-following path for each batch, on
-  /// top of the straight-line fallback already showing. Runs after the
-  /// plan itself is on screen — the route doesn't need to wait on this,
-  /// it's a visual refinement that fills in as each window resolves.
-  Future<void> _loadRoadPolylines(RoutePlan plan, Location vendorStart) async {
-    Location current = vendorStart;
-    var windowIndex = 0;
-
-    for (final window in plan.windows) {
-      if (window.stops.isEmpty) {
-        windowIndex++;
-        continue;
-      }
-
-      final stops = [
-        current,
-        ...window.stops.map((s) => s.order.deliveryLocation),
-      ];
-      final capturedIndex = windowIndex;
-
-      try {
-        final road = await _directionsService.getRoute(stops);
-        if (!mounted) return;
-        setState(() {
-          _roadPolylines = {
-            ..._roadPolylines,
-            capturedIndex: Polyline(
-              polylineId: PolylineId('window_$capturedIndex'),
-              points: road.points,
-              color: MapsService.colorForWindow(capturedIndex),
-              width: 4,
-            ),
-          };
-        });
-      } catch (_) {
-        // Google's API failed for this one window — leave it out of
-        // _roadPolylines, so the straight-line fallback keeps showing
-        // for just that window instead of breaking the whole map.
-      }
-
-      current = window.stops.last.order.deliveryLocation;
-      windowIndex++;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final locationProvider = context.watch<LocationProvider>();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("Today's Route"),
         backgroundColor: Colors.deepPurple,
         actions: [
-          IconButton(
-            icon: Icon(
-              locationProvider.isTracking
-                  ? Icons.gps_fixed
-                  : Icons.gps_not_fixed,
-            ),
-            tooltip: locationProvider.isTracking
-                ? 'Stop live tracking'
-                : 'Start live tracking',
-            onPressed: () {
-              if (locationProvider.isTracking) {
-                locationProvider.stopTracking();
-              } else {
-                locationProvider.startTracking();
-              }
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh conditions (weather, traffic)',
@@ -202,20 +130,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             return const Center(child: Text('No active orders to route yet'));
           }
 
-          final vendorLocation = locationProvider.currentLocation;
-
-          // Straight-line fallback for any window Google hasn't resolved
-          // yet, plus the real road polylines already fetched — combined
-          // into one Set, since GoogleMap wants a Set<Polyline>, not the
-          // List flutter_map used.
-          final polylines = <Polyline>{
-            ...MapsService.buildPolylines(
-              plan,
-              vendorLocation,
-              skipWindows: _roadPolylines.keys.toSet(),
-            ),
-            ..._roadPolylines.values,
-          };
+          const vendorLocation = CampusLocations.vendorBase;
 
           return ListView(
             children: [
@@ -227,7 +142,15 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                     target: MapsService.toLatLng(vendorLocation),
                     zoom: 15.5,
                   ),
-                  polylines: polylines,
+                  // Deliberately no polylines here — with several
+                  // batches shown at once, each a different color,
+                  // criss-crossing lines across a wide area (all of
+                  // Kampala, not just campus) made this screen genuinely
+                  // hard to read rather than helpful. This is a planning
+                  // overview (where are the stops?), not turn-by-turn
+                  // navigation (that's the delivery guy's own tracking
+                  // screen, which still draws a real route to his one
+                  // destination). Plain markers are enough here.
                   markers: MapsService.buildMarkers(plan, vendorLocation),
                   trafficEnabled: true,
                 ),

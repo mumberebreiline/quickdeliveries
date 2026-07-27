@@ -15,8 +15,7 @@ class OrderStatusScreen extends StatelessWidget {
 
   static const _steps = [
     OrderStatus.pending,
-    OrderStatus.confirmed,
-    OrderStatus.preparing,
+    OrderStatus.assigned,
     OrderStatus.outForDelivery,
     OrderStatus.delivered,
   ];
@@ -25,10 +24,8 @@ class OrderStatusScreen extends StatelessWidget {
     switch (status) {
       case OrderStatus.pending:
         return 'Order placed';
-      case OrderStatus.confirmed:
-        return 'Vendor confirmed';
-      case OrderStatus.preparing:
-        return 'Preparing your food';
+      case OrderStatus.assigned:
+        return 'Assigned to a delivery guy';
       case OrderStatus.outForDelivery:
         return 'Out for delivery';
       case OrderStatus.delivered:
