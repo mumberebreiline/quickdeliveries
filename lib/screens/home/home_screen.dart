@@ -22,7 +22,12 @@ class HomeScreen extends StatelessWidget {
           // Sliding food images
           CarouselSlider(
             options: CarouselOptions(
-              height: double.infinity,
+              // double.infinity here is what was actually causing the
+              // stretched/oval look on phones — this package computes
+              // its own internal viewport sizing from this value, and
+              // an unbounded number breaks that math. A real height in
+              // logical pixels (the full screen here) fixes it.
+              height: MediaQuery.of(context).size.height,
               viewportFraction: 1,
               autoPlay: true,
               autoPlayInterval: const Duration(seconds: 4),
