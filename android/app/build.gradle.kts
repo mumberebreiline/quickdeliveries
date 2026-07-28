@@ -8,9 +8,6 @@ plugins {
     id("com.google.gms.google-services")
 }
 
-import java.util.Properties
-import java.io.FileInputStream
-
 val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {

@@ -24,6 +24,7 @@ class DeliveryHomeScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
+            tooltip: 'Log out',
             onPressed: () async {
               await AuthService().signOut();
               if (context.mounted) {

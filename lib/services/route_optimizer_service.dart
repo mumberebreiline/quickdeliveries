@@ -271,40 +271,14 @@ class RouteOptimizerService {
     required bool isNightNow,
     required int largestWindowSize,
   }) {
+    // Personal-safety advisories (storm/rain/night) moved to the
+    // delivery guy's own tracking screen — see
+    // RouteOptimizerService.personalSafetyAdvisories below. He's the one
+    // actually out walking these routes now, not the admin, so these
+    // are the messages that matter to him, not her. What's left here is
+    // purely about batch logistics — decisions only she can act on
+    // (how to group/split orders), not things a delivery guy does.
     final advisories = <AdvisoryMessage>[];
-
-    if (weather.isStorming) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.critical,
-          message:
-              'Thunderstorm right now. If it\'s not safe to walk, consider '
-              'holding this batch 15-20 minutes and messaging customers — a '
-              'short delay beats risking a fall or ruined food in a storm.',
-        ),
-      );
-    } else if (weather.isRaining) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.warning,
-          message:
-              'It\'s raining. Cover the food before heading out, and the '
-              'ETAs below already assume you\'ll be moving slower than usual.',
-        ),
-      );
-    }
-
-    if (isNightNow) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.warning,
-          message:
-              'It\'s after dark. Stick to well-lit paths between '
-              'buildings, and consider going with someone else if you\'re '
-              'carrying cash.',
-        ),
-      );
-    }
 
     if (largestWindowSize > 5) {
       advisories.add(
@@ -344,6 +318,59 @@ class RouteOptimizerService {
         const AdvisoryMessage(
           severity: AdvisorySeverity.info,
           message: 'Conditions look clear — this route should run on schedule.',
+        ),
+      );
+    }
+    return advisories;
+  }
+
+  /// Storm/rain/night personal-safety advisories — pulled out as a
+  /// public, reusable method so the delivery guy's tracking screen can
+  /// generate the exact same messages without duplicating the wording,
+  /// since he's the one these are actually written for.
+  static List<AdvisoryMessage> personalSafetyAdvisories({
+    required WeatherCondition weather,
+    required bool isNightNow,
+  }) {
+    final advisories = <AdvisoryMessage>[];
+
+    if (weather.isStorming) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.critical,
+          message:
+              'Thunderstorm right now. If it\'s not safe to walk, consider '
+              'holding off 15-20 minutes and letting the customer know — a '
+              'short delay beats risking a fall or ruined food in a storm.',
+        ),
+      );
+    } else if (weather.isRaining) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.warning,
+          message:
+              'It\'s raining. Cover the food before heading out, and your '
+              'ETA already assumes you\'ll be moving slower than usual.',
+        ),
+      );
+    }
+
+    if (isNightNow) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.warning,
+          message:
+              'It\'s after dark. Stick to well-lit paths, and consider '
+              'going with someone else if you\'re carrying cash.',
+        ),
+      );
+    }
+
+    if (advisories.isEmpty) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.info,
+          message: 'Conditions look clear for this delivery.',
         ),
       );
     }
