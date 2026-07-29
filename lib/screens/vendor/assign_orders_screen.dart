@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/app_user_profile.dart';
+import '../../models/location.dart';
 import '../../models/order_model.dart';
 import '../../providers/order_provider.dart';
 import '../../services/order_service.dart';
@@ -196,10 +197,86 @@ class _BatchCard extends StatefulWidget {
 class _BatchCardState extends State<_BatchCard> {
   AppUserProfile? _selected;
 
+  Future<void> _confirmCancel(BuildContext context, FoodOrder order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel this order?'),
+        content: Text(
+          'This cancels the order to ${order.deliveryLocation.name}'
+          '${order.customerName.isEmpty ? '' : ' for ${order.customerName}'}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep order'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Cancel order'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await OrderService.cancelOrder(order.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Order cancelled')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not cancel: $e')));
+      }
+    }
+  }
+
+  /// How far a delivery guy's last-known position is from this batch —
+  /// averaged across every stop in it, since a batch can have several.
+  /// Null if he hasn't reported a location yet (never opened the app,
+  /// or it failed silently) — those get sorted to the end rather than
+  /// guessed at.
+  double? _distanceKmFor(AppUserProfile guy) {
+    if (guy.currentLatitude == null || guy.currentLongitude == null) {
+      return null;
+    }
+    final guyLocation = Location(
+      id: 'guy_${guy.uid}',
+      name: 'guy',
+      latitude: guy.currentLatitude!,
+      longitude: guy.currentLongitude!,
+    );
+    final total = widget.orders.fold<double>(
+      0.0,
+      (sum, order) => sum + guyLocation.distanceToKm(order.deliveryLocation),
+    );
+    return total / widget.orders.length;
+  }
+
   @override
   Widget build(BuildContext context) {
     final hour = widget.windowStart.hour.toString().padLeft(2, '0');
     final minute = widget.windowStart.minute.toString().padLeft(2, '0');
+
+    // Nearest first, so the admin's first glance at the list already
+    // suggests the sensible choice — someone with no location yet
+    // (never reported one) goes to the bottom rather than being
+    // guessed into a false "0 km away".
+    final sortedGuys = List<AppUserProfile>.from(widget.deliveryGuys)
+      ..sort((a, b) {
+        final distA = _distanceKmFor(a);
+        final distB = _distanceKmFor(b);
+        if (distA == null && distB == null) return 0;
+        if (distA == null) return 1;
+        if (distB == null) return -1;
+        return distA.compareTo(distB);
+      });
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -222,7 +299,18 @@ class _BatchCardState extends State<_BatchCard> {
               ],
             ),
             const SizedBox(height: 8),
-            for (final order in widget.orders) OrderCard(order: order),
+            for (final order in widget.orders)
+              OrderCard(
+                order: order,
+                actions: TextButton.icon(
+                  onPressed: () => _confirmCancel(context, order),
+                  icon: const Icon(Icons.close, color: Colors.red, size: 18),
+                  label: const Text(
+                    'Cancel order',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+              ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -230,18 +318,21 @@ class _BatchCardState extends State<_BatchCard> {
                   child: DropdownButtonFormField<AppUserProfile>(
                     initialValue: _selected,
                     decoration: const InputDecoration(
-                      labelText: 'Assign to',
+                      labelText: 'Assign to (nearest first)',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: widget.deliveryGuys
-                        .map(
-                          (guy) => DropdownMenuItem(
-                            value: guy,
-                            child: Text(guy.name ?? guy.uid),
-                          ),
-                        )
-                        .toList(),
+                    items: sortedGuys.map((guy) {
+                      final distanceKm = _distanceKmFor(guy);
+                      final label = distanceKm == null
+                          ? '${guy.name ?? guy.uid} — location unknown'
+                          : '${guy.name ?? guy.uid} — '
+                                '${distanceKm.toStringAsFixed(distanceKm < 1 ? 2 : 1)} km away';
+                      return DropdownMenuItem(
+                        value: guy,
+                        child: Text(label, overflow: TextOverflow.ellipsis),
+                      );
+                    }).toList(),
                     onChanged: (guy) => setState(() => _selected = guy),
                   ),
                 ),

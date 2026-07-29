@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/location_service.dart';
+import '../../services/user_service.dart';
 import '../home/login_screen.dart';
 import 'delivery_tracking_screen.dart';
 
@@ -10,8 +12,44 @@ import 'delivery_tracking_screen.dart';
 /// assigned to him, each with one button. No confirm/prepare steps to
 /// walk through (those don't exist for him at all); an order lands here
 /// only once the admin has already handed it to him specifically.
-class DeliveryHomeScreen extends StatelessWidget {
+class DeliveryHomeScreen extends StatefulWidget {
   const DeliveryHomeScreen({super.key});
+
+  @override
+  State<DeliveryHomeScreen> createState() => _DeliveryHomeScreenState();
+}
+
+class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
+  final _locationService = LocationService();
+  final _userService = UserService();
+
+  @override
+  void initState() {
+    super.initState();
+    // A rough "where is he right now" ping, taken once when he opens
+    // this screen — not continuous tracking. This is what lets the
+    // admin's Assign Orders screen suggest the nearest delivery guy
+    // even before anyone's actively out on a delivery (the tracking
+    // screen already reports live position during an active trip; this
+    // covers the gap while he's just waiting for one).
+    _reportRoughLocation();
+  }
+
+  Future<void> _reportRoughLocation() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final location = await _locationService.getCurrentLocation();
+      await _userService.updateMyLocation(
+        uid: uid,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      );
+    } catch (_) {
+      // Not critical if this fails — the admin's screen just won't have
+      // a distance to show for him until it succeeds.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,56 +118,64 @@ class DeliveryHomeScreen extends StatelessWidget {
                     final alreadyStarted =
                         order.status == OrderStatus.outForDelivery;
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              order.deliveryLocation.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              order.customerName.isEmpty
-                                  ? 'Customer'
-                                  : order.customerName,
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        DeliveryTrackingScreen(order: order),
-                                  ),
-                                ),
-                                icon: Icon(
-                                  alreadyStarted
-                                      ? Icons.navigation
-                                      : Icons.play_arrow,
-                                ),
-                                label: Text(
-                                  alreadyStarted ? 'Continue' : 'Start',
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.teal,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
+                    // MergeSemantics combines the destination, customer
+                    // name, and button into ONE announcement for a
+                    // screen reader — "Delivery to Nkrumah Hall for
+                    // Jane, Start button" as a single stop, rather than
+                    // making a blind delivery guy swipe through three
+                    // separate fragments just to understand one card.
+                    return MergeSemantics(
+                      child: Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                order.deliveryLocation.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 4),
+                              Text(
+                                order.customerName.isEmpty
+                                    ? 'Customer'
+                                    : order.customerName,
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          DeliveryTrackingScreen(order: order),
+                                    ),
+                                  ),
+                                  icon: Icon(
+                                    alreadyStarted
+                                        ? Icons.navigation
+                                        : Icons.play_arrow,
+                                  ),
+                                  label: Text(
+                                    alreadyStarted ? 'Continue' : 'Start',
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.teal,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );

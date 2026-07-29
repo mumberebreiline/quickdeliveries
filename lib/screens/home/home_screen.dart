@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/auth_service.dart';
 import '../order/menu_screen.dart';
 import 'about_us_screen.dart';
 import 'feedback_screen.dart';
@@ -16,6 +19,14 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Anonymous guests (the default for anyone who never signed up) get
+    // "Login" here — nothing to log out of, since that identity is just
+    // a behind-the-scenes convenience. Someone who actually registered
+    // sees "Logout" instead, matching the same visible option every
+    // other role in the app already has.
+    final currentUser = context.watch<AuthProvider>().user;
+    final hasRealAccount = currentUser != null && !currentUser.isAnonymous;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -69,16 +80,34 @@ class HomeScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-                          navItem(
-                            context,
-                            "Login",
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => LoginScreen(),
-                              ),
-                            ),
-                          ),
+                          hasRealAccount
+                              ? navItem(context, "Logout", () async {
+                                  await AuthService().signOut();
+                                  // Straight back to being a guest —
+                                  // main.dart's ensureSignedIn() only
+                                  // runs once at app startup, so this
+                                  // signs a fresh anonymous session
+                                  // back in immediately rather than
+                                  // leaving them signed out entirely.
+                                  await AuthService().ensureSignedIn();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Logged out'),
+                                      ),
+                                    );
+                                  }
+                                })
+                              : navItem(
+                                  context,
+                                  "Login",
+                                  () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => LoginScreen(),
+                                    ),
+                                  ),
+                                ),
                           navItem(
                             context,
                             "About Us",

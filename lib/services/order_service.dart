@@ -144,6 +144,15 @@ class OrderService {
     return _ordersCollection.doc(orderId).update({'status': status});
   }
 
+  /// Either the admin or the assigned delivery guy can cancel an order —
+  /// this just sets the status; both streamPendingOrders and
+  /// streamAssignedOrders already filter on status, so a cancelled
+  /// order disappears from both of their screens on its own, no extra
+  /// cleanup needed.
+  static Future<void> cancelOrder(String orderId) {
+    return updateStatus(orderId, OrderStatus.cancelled);
+  }
+
   /// The admin hands an order (or a whole batch of them) to a specific
   /// delivery guy — this is what replaces the old manual "confirm/start
   /// preparing" steps. The order is treated as already confirmed the

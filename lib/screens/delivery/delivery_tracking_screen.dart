@@ -14,13 +14,16 @@ import '../../services/route_optimizer_service.dart'
     show AdvisoryMessage, AdvisorySeverity, RouteOptimizerService;
 import '../../utils/constants.dart';
 
-/// Everything the delivery guy sees after tapping "Start" — a real,
-/// traffic-aware road route on Google Maps, spoken turn-by-turn
-/// directions (free, on-device text-to-speech — no API cost beyond the
-/// Directions call itself), and live distance/time remaining. Arrival
-/// is detected automatically (getting within [_arrivalRadiusKm] of the
-/// destination marks the order delivered on its own) — no second
-/// button, matching the one-button design this screen exists for.
+/// Everything the delivery guy sees after tapping "Start" — laid out like
+/// a real navigation app: the map fills almost the whole screen, and a
+/// compact panel at the bottom shows distance left, time left, and a way
+/// out (Cancel) — not stacked on top the way it was before.
+///
+/// Real, traffic-aware road route on Google Maps, spoken turn-by-turn
+/// directions (free, on-device text-to-speech), and live distance/time
+/// remaining. Arrival is detected automatically (getting within
+/// [_arrivalRadiusKm] of the destination marks the order delivered on
+/// its own) — no second "mark delivered" button.
 ///
 /// Nothing here is tied to a specific person — whichever delivery guy
 /// account is logged in gets guided to whichever order they were
@@ -54,6 +57,7 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
   String? _error;
   bool _hasArrived = false;
   bool _isLoadingRoute = true;
+  bool _isCancelling = false;
 
   // Weather/night-safety advisories — this was the vendor's route-
   // overview information before, moved here since he's the one actually
@@ -262,6 +266,52 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
     _userService.clearMyLocation(uid);
   }
 
+  /// He can back out of a delivery he can't complete — a puncture, a
+  /// wrong address, anything. Confirmed first so it can't happen with a
+  /// stray tap; cancelling clears his live-location marker too, and the
+  /// order simply disappears from his list (streamAssignedOrders already
+  /// filters out cancelled orders) so the admin can hand it to someone
+  /// else.
+  Future<void> _confirmCancel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel this delivery?'),
+        content: Text(
+          'This will cancel the order to ${widget.order.deliveryLocation.name}. '
+          'The admin will need to reassign it to someone else.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep delivering'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Cancel order'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isCancelling = true);
+    try {
+      await OrderService.cancelOrder(widget.order.id);
+      _clearMyLocation();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not cancel: $e')));
+        setState(() => _isCancelling = false);
+      }
+    }
+  }
+
   @override
   void dispose() {
     _locationSub?.cancel();
@@ -306,111 +356,9 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            color: Colors.teal,
-            child: current == null
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (_error == null) ...[
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'Finding your location...',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ] else
-                        Expanded(
-                          child: Text(
-                            _error!,
-                            style: const TextStyle(color: Colors.white),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                    ],
-                  )
-                : Semantics(
-                    // liveRegion means a screen reader re-announces this
-                    // block whenever the text inside changes, without
-                    // the person needing to manually re-focus it —
-                    // matters here since distance/time update every few
-                    // seconds on their own.
-                    liveRegion: true,
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _StatColumn(
-                              label: 'Distance left',
-                              value:
-                                  '${distanceKm!.toStringAsFixed(distanceKm < 1 ? 2 : 1)} km',
-                            ),
-                            _StatColumn(
-                              label: 'Time left',
-                              value: etaMinutes! < 1
-                                  ? 'Almost there'
-                                  : '${etaMinutes.round()} min',
-                            ),
-                          ],
-                        ),
-                        if (currentInstruction != null) ...[
-                          const SizedBox(height: 14),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.volume_up,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    currentInstruction,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ] else if (_isLoadingRoute) ...[
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Getting turn-by-turn directions...',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-          ),
-          if (_advisories.isNotEmpty && current != null)
-            _AdvisoryPanel(advisories: _advisories),
+          // The map is the dominant element now, same as a real
+          // navigation app — everything else lives in a compact panel
+          // underneath instead of pushing the map down the screen.
           Expanded(
             child: current == null
                 ? Center(
@@ -481,6 +429,152 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
                     },
                   ),
           ),
+
+          // Everything below the map: advisories, current instruction,
+          // distance/time, and Cancel — the "bottom sheet" a real Maps
+          // app would show.
+          if (_advisories.isNotEmpty && current != null)
+            _AdvisoryPanel(advisories: _advisories),
+          SafeArea(
+            top: false,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              decoration: const BoxDecoration(
+                color: Colors.teal,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(18),
+                  topRight: Radius.circular(18),
+                ),
+              ),
+              child: current == null
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (_error == null) ...[
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Finding your location...',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ] else
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: Colors.white),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (currentInstruction != null) ...[
+                          Semantics(
+                            liveRegion: true,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.volume_up,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      currentInstruction,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ] else if (_isLoadingRoute) ...[
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              'Getting turn-by-turn directions...',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                        Semantics(
+                          liveRegion: true,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _StatColumn(
+                                label: 'Distance left',
+                                value:
+                                    '${distanceKm!.toStringAsFixed(distanceKm < 1 ? 2 : 1)} km',
+                              ),
+                              _StatColumn(
+                                label: 'Time left',
+                                value: etaMinutes! < 1
+                                    ? 'Almost there'
+                                    : '${etaMinutes.round()} min',
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _isCancelling ? null : _confirmCancel,
+                            icon: _isCancelling
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.close, color: Colors.white),
+                            label: Text(
+                              _isCancelling
+                                  ? 'Cancelling...'
+                                  : 'Cancel this delivery',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white70),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
         ],
       ),
     );
@@ -518,6 +612,7 @@ class _AdvisoryPanel extends StatelessWidget {
       liveRegion: true,
       child: Container(
         width: double.infinity,
+        color: Colors.white,
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

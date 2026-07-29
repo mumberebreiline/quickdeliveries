@@ -4,15 +4,15 @@ import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../home/login_screen.dart';
 import 'assign_orders_screen.dart';
-import 'route_map_screen.dart';
 import 'live_fleet_screen.dart';
 import 'delivery_history_screen.dart';
 
 /// The admin's home screen. She no longer delivers personally — her job
-/// is deciding who does, via Assign Orders. Route Overview stays around
-/// as a planning aid: the same 2-opt/weather/hazard-free routing engine
-/// as before, just used to see how a batch *would* run before deciding
-/// who to hand it to, rather than her following it herself.
+/// is deciding who does, via Assign Orders. Route Overview was removed
+/// entirely (it duplicated what Assign Orders already needs to do, and
+/// wasn't earning its own screen once she stopped following routes
+/// herself) — route_map_screen.dart itself is now unused and can be
+/// deleted from the project.
 class VendorDashboardScreen extends StatelessWidget {
   const VendorDashboardScreen({super.key});
 
@@ -27,6 +27,7 @@ class VendorDashboardScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
+            tooltip: 'Log out',
             onPressed: () async {
               await context.read<AuthProvider>().signOut();
               if (context.mounted) {
@@ -83,15 +84,6 @@ class VendorDashboardScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const AssignOrdersScreen()),
-              ),
-            ),
-            _DashboardTile(
-              icon: Icons.map,
-              label: 'Route Overview',
-              subtitle: 'Optimized grouping and conditions, before assigning',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const RouteMapScreen()),
               ),
             ),
             _DashboardTile(
