@@ -9,9 +9,11 @@ import '../home/login_screen.dart';
 import 'delivery_tracking_screen.dart';
 
 /// The delivery guy's whole app, essentially — a list of what's been
-/// assigned to him, each with one button. No confirm/prepare steps to
-/// walk through (those don't exist for him at all); an order lands here
-/// only once the admin has already handed it to him specifically.
+/// assigned to him, and ONE button. Tapping it hands every currently
+/// assigned stop to the tracking screen at once, which works out the
+/// most time-efficient order to visit them in and then guides him
+/// through all of them back to back — no returning here and tapping
+/// Start again between deliveries.
 class DeliveryHomeScreen extends StatefulWidget {
   const DeliveryHomeScreen({super.key});
 
@@ -110,76 +112,111 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: orders.length,
-                  itemBuilder: (context, index) {
-                    final order = orders[index];
-                    final alreadyStarted =
-                        order.status == OrderStatus.outForDelivery;
+                final alreadyStarted = orders.any(
+                  (o) => o.status == OrderStatus.outForDelivery,
+                );
 
-                    // MergeSemantics combines the destination, customer
-                    // name, and button into ONE announcement for a
-                    // screen reader — "Delivery to Nkrumah Hall for
-                    // Jane, Start button" as a single stop, rather than
-                    // making a blind delivery guy swipe through three
-                    // separate fragments just to understand one card.
-                    return MergeSemantics(
-                      child: Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                order.deliveryLocation.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                return Column(
+                  children: [
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: orders.length,
+                        itemBuilder: (context, index) {
+                          final order = orders[index];
+
+                          // MergeSemantics combines the destination and
+                          // customer name into ONE announcement for a
+                          // screen reader, rather than two separate
+                          // fragments per card.
+                          return MergeSemantics(
+                            child: Card(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 14,
+                                          backgroundColor: Colors.teal.shade50,
+                                          child: Text(
+                                            '${index + 1}',
+                                            style: const TextStyle(
+                                              color: Colors.teal,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            order.deliveryLocation.name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 38),
+                                      child: Text(
+                                        order.customerName.isEmpty
+                                            ? 'Customer'
+                                            : order.customerName,
+                                        style: const TextStyle(
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                order.customerName.isEmpty
-                                    ? 'Customer'
-                                    : order.customerName,
-                                style: const TextStyle(color: Colors.grey),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    DeliveryTrackingScreen(orders: orders),
                               ),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          DeliveryTrackingScreen(order: order),
-                                    ),
-                                  ),
-                                  icon: Icon(
-                                    alreadyStarted
-                                        ? Icons.navigation
-                                        : Icons.play_arrow,
-                                  ),
-                                  label: Text(
-                                    alreadyStarted ? 'Continue' : 'Start',
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.teal,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
+                            icon: Icon(
+                              alreadyStarted
+                                  ? Icons.navigation
+                                  : Icons.play_arrow,
+                            ),
+                            label: Text(
+                              alreadyStarted
+                                  ? 'Continue deliveries (${orders.length})'
+                                  : 'Start deliveries (${orders.length})',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
                           ),
                         ),
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 );
               },
             ),

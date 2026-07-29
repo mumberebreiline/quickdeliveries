@@ -19,7 +19,7 @@ class AboutUsScreen extends StatelessWidget {
           const SizedBox(height: 12),
           const Text(
             'Quick Deliveries brings fresh, home-style food straight to '
-            'you, wherever you are on Makerere University campus — from '
+            'you, wherever you are on Makerere University campus from '
             'your hall of residence to your lecture hall. No walking '
             'across campus on an empty stomach between classes.',
             style: TextStyle(fontSize: 15, height: 1.5),
@@ -32,7 +32,7 @@ class AboutUsScreen extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             'To make good food genuinely accessible to every student and '
-            'staff member on campus — ordered in a couple of taps, '
+            'staff member on campus ordered in a couple of taps, '
             'delivered reliably, at a fair price.',
             style: TextStyle(fontSize: 15, height: 1.5),
           ),
@@ -44,7 +44,7 @@ class AboutUsScreen extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             'Browse the menu, add what you like to your cart, and place '
-            'your order — no account required. Behind the scenes, orders '
+            'your order no account required. Behind the scenes, orders '
             'are grouped and routed efficiently so our delivery team can '
             'get to you as quickly as possible, wherever on campus you '
             'happen to be.',
@@ -66,7 +66,7 @@ class AboutUsScreen extends StatelessWidget {
           const ListTile(
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.phone_outlined, color: Colors.deepPurple),
-            title: Text('+256 700 000 000'),
+            title: Text('+256 752329165'),
           ),
           const ListTile(
             contentPadding: EdgeInsets.zero,

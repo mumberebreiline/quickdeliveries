@@ -91,7 +91,7 @@ class LiveFleetScreen extends StatelessWidget {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
-                color: Colors.deepPurple.withOpacity(0.06),
+                color: Colors.deepPurple.withValues(alpha: 0.06),
                 child: Text(
                   '${active.length} out delivering now'
                   '${offline > 0 ? ' • $offline not currently active' : ''}',

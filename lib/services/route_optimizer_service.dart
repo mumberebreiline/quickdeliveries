@@ -111,6 +111,36 @@ class RouteOptimizerService {
        _trafficService = trafficService ?? TrafficService(),
        _directionsService = directionsService ?? DirectionsService();
 
+  /// Puts a delivery guy's own assigned stops in the most time-efficient
+  /// order to visit them, starting from wherever he currently is. Unlike
+  /// buildDeliveryPlan (which groups a whole day's pending orders by time
+  /// window for the admin to assign), this just answers one question:
+  /// "given these specific stops and my current position, what's the
+  /// fastest order to hit them in, accounting for real traffic right
+  /// now?" That's deliberately not always the geographically shortest
+  /// path — the 2-opt search below minimizes total travel *time*
+  /// (real, traffic-aware minutes from Google), which is what actually
+  /// matters for getting food delivered quickly, not raw distance.
+  Future<List<FoodOrder>> sequenceStopsForDeliveryGuy(
+    List<FoodOrder> stops, {
+    required Location startLocation,
+  }) async {
+    if (stops.length <= 1) return stops;
+
+    final locations = [startLocation, ...stops.map((o) => o.deliveryLocation)];
+    final matrix = await _directionsService.getDistanceMatrix(locations);
+
+    double costMinutes(Location from, Location to) {
+      final real = matrix?.durationMinutes(from, to);
+      if (real != null) return real;
+      return (from.distanceToKm(to) / AppConfig.assumedSpeedKmh) * 60;
+    }
+
+    var sequenced = _nearestNeighbourRoute(stops, startLocation, costMinutes);
+    sequenced = _twoOptImprove(sequenced, startLocation, costMinutes);
+    return sequenced;
+  }
+
   Future<RoutePlan> buildDeliveryPlan(
     List<FoodOrder> pendingOrders, {
     Location vendorStart = CampusLocations.vendorBase,

@@ -84,7 +84,7 @@ class OrderStatusScreen extends StatelessWidget {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.12),
+                      color: Colors.orange.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -169,7 +169,11 @@ class _StepRow extends StatelessWidget {
               size: 20,
             ),
             if (!isLast)
-              Container(width: 2, height: 28, color: color.withOpacity(0.4)),
+              Container(
+                width: 2,
+                height: 28,
+                color: color.withValues(alpha: 0.4),
+              ),
           ],
         ),
         const SizedBox(width: 12),

@@ -269,7 +269,7 @@ class _TimelineDot extends StatelessWidget {
           width: 30,
           height: 30,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
+            color: color.withValues(alpha: 0.12),
             shape: BoxShape.circle,
             border: Border.all(color: color, width: 1.5),
           ),
@@ -310,9 +310,9 @@ class _HealthScoreBadge extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.1),
+        color: _color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _color.withOpacity(0.3)),
+        border: Border.all(color: _color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
