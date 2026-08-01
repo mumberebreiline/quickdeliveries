@@ -141,11 +141,15 @@ class OrderCard extends StatelessWidget {
               children: [
                 const Icon(Icons.location_on, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
-                Text(
-                  order.deliveryLocation.name,
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                Expanded(
+                  child: Text(
+                    order.deliveryLocation.name,
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 const Icon(Icons.access_time, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(

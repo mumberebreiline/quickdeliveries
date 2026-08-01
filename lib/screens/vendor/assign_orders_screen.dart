@@ -335,7 +335,9 @@ class _BatchCardState extends State<_BatchCard> {
                   child: DropdownButtonFormField<AppUserProfile>(
                     initialValue: _selected,
                     decoration: const InputDecoration(
-                      labelText: 'Assign to (nearest first)',
+                      labelText: 'Assign to',
+                      helperText: 'Nearest first',
+                      helperStyle: TextStyle(fontSize: 10),
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),

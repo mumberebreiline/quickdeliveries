@@ -68,67 +68,82 @@ class HomeScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Image.asset("assets/images/logo.jpg", height: 55),
-                      Row(
-                        children: [
-                          navItem(
-                            context,
-                            "Menu",
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const MenuScreen(),
-                              ),
-                            ),
-                          ),
-                          hasRealAccount
-                              ? navItem(context, "Logout", () async {
-                                  await AuthService().signOut();
-                                  // Straight back to being a guest —
-                                  // main.dart's ensureSignedIn() only
-                                  // runs once at app startup, so this
-                                  // signs a fresh anonymous session
-                                  // back in immediately rather than
-                                  // leaving them signed out entirely.
-                                  await AuthService().ensureSignedIn();
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Logged out'),
-                                      ),
-                                    );
-                                  }
-                                })
-                              : navItem(
+                      // A plain Row here overflowed on narrower phones —
+                      // 4 nav items plus the logo simply didn't fit.
+                      // Wrapping in a horizontally scrollable view means
+                      // it can never overflow again, on any screen size,
+                      // at the cost of a small swipe if it doesn't all
+                      // fit — a safer fix than guessing at exact spacing
+                      // that happens to work on one specific phone.
+                      Flexible(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              navItem(
+                                context,
+                                "Menu",
+                                () => Navigator.push(
                                   context,
-                                  "Login",
-                                  () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => LoginScreen(),
-                                    ),
+                                  MaterialPageRoute(
+                                    builder: (context) => const MenuScreen(),
                                   ),
                                 ),
-                          navItem(
-                            context,
-                            "About Us",
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AboutUsScreen(),
                               ),
-                            ),
-                          ),
-                          navItem(
-                            context,
-                            "Feedback",
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const FeedbackScreen(),
+                              hasRealAccount
+                                  ? navItem(context, "Logout", () async {
+                                      await AuthService().signOut();
+                                      // Straight back to being a guest —
+                                      // main.dart's ensureSignedIn() only
+                                      // runs once at app startup, so this
+                                      // signs a fresh anonymous session
+                                      // back in immediately rather than
+                                      // leaving them signed out entirely.
+                                      await AuthService().ensureSignedIn();
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Logged out'),
+                                          ),
+                                        );
+                                      }
+                                    })
+                                  : navItem(
+                                      context,
+                                      "Login",
+                                      () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => LoginScreen(),
+                                        ),
+                                      ),
+                                    ),
+                              navItem(
+                                context,
+                                "About Us",
+                                () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const AboutUsScreen(),
+                                  ),
+                                ),
                               ),
-                            ),
+                              navItem(
+                                context,
+                                "Feedback",
+                                () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const FeedbackScreen(),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ],
                   ),

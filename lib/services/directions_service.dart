@@ -13,12 +13,19 @@ class NavigationStep {
   final double latitude;
   final double longitude;
   final double distanceMeters;
+  // Google already tells us the turn type for every step — values like
+  // "turn-left", "turn-right", "roundabout-left", "merge", etc. Null for
+  // a plain "continue straight" step, where Google doesn't send one at
+  // all. This is what powers the on-screen directional arrow, not just
+  // the spoken instruction.
+  final String? maneuver;
 
   const NavigationStep({
     required this.instruction,
     required this.latitude,
     required this.longitude,
     required this.distanceMeters,
+    this.maneuver,
   });
 }
 
@@ -150,6 +157,7 @@ class DirectionsService {
             latitude: (startLocation['lat'] as num).toDouble(),
             longitude: (startLocation['lng'] as num).toDouble(),
             distanceMeters: (step['distance']['value'] as num).toDouble(),
+            maneuver: step['maneuver'] as String?,
           ),
         );
 

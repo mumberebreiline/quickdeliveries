@@ -51,6 +51,7 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
 
   StreamSubscription<Location>? _locationSub;
 
+  GoogleMapController? _mapController;
   Location? _currentLocation;
   List<FoodOrder>? _sequencedStops; // null until the optimal order is computed
   int _currentStopIndex = 0;
@@ -69,11 +70,61 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
       ? null
       : _sequencedStops![_currentStopIndex];
 
+  /// Tries to pick a more natural-sounding voice than whatever's
+  /// default on the device, and tunes pitch/rate for clearer, less
+  /// robotic-sounding speech. This is genuinely limited by what's
+  /// actually installed on the phone — flutter_tts uses the device's
+  /// own system TTS engine, so voice *quality* itself is capped by
+  /// that, not something this code can override entirely. The single
+  /// biggest lever outside the app: on Android, Settings → System →
+  /// Languages & input → Text-to-speech → make sure "Google" is the
+  /// preferred engine and its voice data is fully downloaded/updated —
+  /// an outdated or basic voice pack sounds noticeably more robotic
+  /// than an up-to-date one, and that's a device setting, not
+  /// something this app can force.
+  Future<void> _configureVoice() async {
+    await _tts.setLanguage('en-US');
+    await _tts.setSpeechRate(0.48);
+    await _tts.setPitch(1.0);
+    await _tts.setVolume(1.0);
+
+    try {
+      final voices = await _tts.getVoices as List<dynamic>?;
+      if (voices == null) return;
+
+      // Prefer a voice whose name suggests it's one of the higher-
+      // quality network/neural voices Android ships when the Google
+      // TTS engine's voice packs are up to date, over the very basic
+      // default. This is best-effort — if none match, the device's
+      // existing default voice is used, which is still perfectly
+      // functional.
+      final betterVoice = voices.cast<Map>().firstWhere((voice) {
+        final name = (voice['name'] as String? ?? '').toLowerCase();
+        final locale = (voice['locale'] as String? ?? '');
+        return locale.startsWith('en') &&
+            (name.contains('local') ||
+                name.contains('network') ||
+                name.contains('#female') ||
+                name.contains('#male'));
+      }, orElse: () => {});
+
+      if (betterVoice.isNotEmpty) {
+        await _tts.setVoice({
+          'name': betterVoice['name'] as String,
+          'locale': betterVoice['locale'] as String,
+        });
+      }
+    } catch (e) {
+      // Not all platforms/devices expose getVoices consistently —
+      // falling back to the default voice is a perfectly fine outcome.
+      debugPrint('Could not select a specific voice, using device default: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    _tts.setLanguage('en-US');
-    _tts.setSpeechRate(0.45);
+    _configureVoice();
     _begin();
   }
 
@@ -111,6 +162,15 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
         });
         _pushMyLocation(location);
         _checkProgress(location);
+        // This is the actual fix for "the map looks stuck" — before,
+        // the camera was positioned once when the map first built and
+        // never touched again, no matter how far he moved. Real
+        // navigation apps continuously re-center on the current
+        // position; animateCamera does that smoothly instead of
+        // jumping.
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLng(LatLng(location.latitude, location.longitude)),
+        );
       },
       onError: (Object e) {
         if (mounted) setState(() => _error = e.toString());
@@ -392,6 +452,52 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
     super.dispose();
   }
 
+  /// Maps Google's own maneuver strings (documented at
+  /// developers.google.com/maps/documentation/directions/get-directions
+  /// under "Maneuver") to a matching directional arrow — this is the
+  /// actual visual "head left / head right" arrow, alongside the
+  /// spoken instruction, not instead of it.
+  IconData _maneuverIcon(String? maneuver) {
+    switch (maneuver) {
+      case 'turn-left':
+        return Icons.turn_left;
+      case 'turn-right':
+        return Icons.turn_right;
+      case 'turn-slight-left':
+        return Icons.turn_slight_left;
+      case 'turn-slight-right':
+        return Icons.turn_slight_right;
+      case 'turn-sharp-left':
+        return Icons.turn_sharp_left;
+      case 'turn-sharp-right':
+        return Icons.turn_sharp_right;
+      case 'uturn-left':
+        return Icons.u_turn_left;
+      case 'uturn-right':
+        return Icons.u_turn_right;
+      case 'merge':
+        return Icons.merge;
+      case 'fork-left':
+        return Icons.fork_left;
+      case 'fork-right':
+        return Icons.fork_right;
+      case 'roundabout-left':
+        return Icons.roundabout_left;
+      case 'roundabout-right':
+        return Icons.roundabout_right;
+      case 'ramp-left':
+        return Icons.turn_slight_left;
+      case 'ramp-right':
+        return Icons.turn_slight_right;
+      case 'straight':
+      default:
+        // Google omits the maneuver field entirely for a plain
+        // "continue straight" step — this is the correct fallback for
+        // that case, not just an unhandled value.
+        return Icons.straight;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final current = _currentLocation;
@@ -436,6 +542,10 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
     final currentInstruction =
         (_route != null && _currentInstructionStepIndex < _route!.steps.length)
         ? _route!.steps[_currentInstructionStepIndex].instruction
+        : null;
+    final currentManeuver =
+        (_route != null && _currentInstructionStepIndex < _route!.steps.length)
+        ? _route!.steps[_currentInstructionStepIndex].maneuver
         : null;
 
     // Remaining stops (current one onward) get numbered pins, each
@@ -490,6 +600,7 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
                       target: LatLng(current.latitude, current.longitude),
                       zoom: 16,
                     ),
+                    onMapCreated: (controller) => _mapController = controller,
                     myLocationEnabled: true,
                     polylines: {
                       if (_route != null)
@@ -587,17 +698,24 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
                               ),
                               margin: const EdgeInsets.only(bottom: 12),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.15),
+                                color: Colors.white.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(
-                                    Icons.volume_up,
+                                  // The actual "arrow showing which way
+                                  // to head" — Google's Directions API
+                                  // already tells us the turn type for
+                                  // every step (turn-left, roundabout,
+                                  // merge, etc.); this was sitting
+                                  // unused before, only the spoken
+                                  // instruction was working.
+                                  Icon(
+                                    _maneuverIcon(currentManeuver),
                                     color: Colors.white,
-                                    size: 18,
+                                    size: 28,
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
                                       currentInstruction,
