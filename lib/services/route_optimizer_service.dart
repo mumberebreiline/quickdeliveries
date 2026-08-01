@@ -1,7 +1,7 @@
 import '../models/location.dart';
 import '../models/order_model.dart';
 import '../utils/constants.dart';
-import 'osrm_service.dart';
+import 'directions_service.dart';
 import 'traffic_service.dart';
 import 'weather_service.dart';
 
@@ -20,9 +20,10 @@ class RouteStop {
   final bool isAtRiskOfLateness;
   final String reasonNote;
 
-  /// Whether this stop's distance/time came from a real OSRM road route
-  /// (true) or the straight-line Haversine fallback (false) — shown in
-  /// the UI so the vendor knows how much to trust a given ETA.
+  /// Whether this stop's distance/time came from a real Google road route
+  /// with live traffic (true) or the straight-line Haversine fallback
+  /// (false) — shown in the UI so the vendor knows how much to trust a
+  /// given ETA.
   final bool usedRealRoadData;
 
   const RouteStop({
@@ -46,8 +47,8 @@ class TimeWindowGroup {
 
 /// Everything here comes from a sensor, a clock, or a routing engine —
 /// nothing the vendor has to type in. Weather from the weather API,
-/// traffic from the traffic API (when configured), real road distances
-/// from OSRM, time-of-day from the device clock.
+/// traffic from the traffic API (when configured), real live-traffic-aware
+/// road distances from Google, time-of-day from the device clock.
 class RouteConditions {
   final WeatherCondition weather;
   final double trafficMultiplier;
@@ -97,44 +98,18 @@ class RoutePlan {
       flatStops.where((s) => s.usedRealRoadData).length;
 }
 
-/// Builds the vendor's delivery plan out of pending orders — fully
-/// automatic, no vendor input anywhere in this pipeline.
-///
-/// 1. GROUP BY TIME — orders needed around the same time batch together.
-/// 2. SEQUENCE BY REAL ROAD COST — for each time-window, one OSRM Table
-///    call fetches a full pairwise matrix of real road distances/
-///    durations between every stop in that batch (not a straight line —
-///    actual streets and footpaths). Nearest-neighbour then 2-opt local
-///    search run against that real-cost matrix, fixing greedy nearest-
-///    neighbour's known weakness of painting itself into a bad corner.
-///    If OSRM's free public server is unreachable for a given window
-///    (it's a best-effort demo service, not a guaranteed SLA), that
-///    window quietly falls back to straight-line distance instead of
-///    breaking route planning — every stop's `usedRealRoadData` flag
-///    says honestly which case applied.
-/// 3. WEATHER + TRAFFIC REFINE TIMING, NOT ORDER — both fetched
-///    automatically; a citywide slowdown affects every stop equally, so
-///    it changes ETA accuracy, not which route is shortest.
-/// 4. ADVISORIES turn all of the above into plain "what should I actually
-///    do" answers — storms, night delivery, an overloaded batch, orders
-///    at risk of lateness — computed automatically, never asked of the
-///    vendor.
-/// 5. CHEAPEST INSERTION lets a new order that arrives mid-route slot
-///    into the *existing* plan instantly, using straight-line distance
-///    (no new network calls, by design — a full "refresh" reconciles it
-///    with real road data afterward).
 class RouteOptimizerService {
   final WeatherService _weatherService;
   final TrafficService _trafficService;
-  final OsrmService _osrmService;
+  final DirectionsService _directionsService;
 
   RouteOptimizerService({
     WeatherService? weatherService,
     TrafficService? trafficService,
-    OsrmService? osrmService,
+    DirectionsService? directionsService,
   }) : _weatherService = weatherService ?? WeatherService(),
        _trafficService = trafficService ?? TrafficService(),
-       _osrmService = osrmService ?? OsrmService();
+       _directionsService = directionsService ?? DirectionsService();
 
   Future<RoutePlan> buildDeliveryPlan(
     List<FoodOrder> pendingOrders, {
@@ -170,15 +145,13 @@ class RouteOptimizerService {
     for (final windowStart in windowStarts) {
       final ordersInWindow = groupedByWindow[windowStart]!;
 
-      // One network call per batch — a real distance/duration matrix
-      // between the vendor's current position and every stop in this
-      // window, in one shot. Falls back to null (handled gracefully
-      // everywhere below) if OSRM's free demo server can't answer.
       final windowLocations = [
         currentPosition,
         ...ordersInWindow.map((o) => o.deliveryLocation),
       ];
-      final matrix = await _osrmService.getDistanceMatrix(windowLocations);
+      final matrix = await _directionsService.getDistanceMatrix(
+        windowLocations,
+      );
 
       double costMinutes(Location from, Location to) {
         final real = matrix?.durationMinutes(from, to);
@@ -388,11 +361,6 @@ class RouteOptimizerService {
     return 0;
   }
 
-  /// Slots a new order into an *already-built* plan — a fresh order
-  /// arrives while she's already out delivering. Deliberately stays on
-  /// straight-line distance rather than fetching a new OSRM matrix, so
-  /// this stays instant with zero network calls; the next full "refresh"
-  /// reconciles it against real road data along with everything else.
   RoutePlan insertOrderIntoPlan(
     RoutePlan currentPlan,
     FoodOrder newOrder, {

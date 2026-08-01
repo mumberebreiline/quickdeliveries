@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../models/location.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../services/maps_service.dart';
-import '../../services/osrm_service.dart';
+import '../../services/directions_service.dart';
 import '../../services/route_optimizer_service.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/location_preview.dart';
@@ -23,9 +23,9 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   String? _error;
   OrderProvider? _orderProvider;
 
-  final OsrmService _osrmService = OsrmService();
-  // Real road-following lines, keyed by window index — filled in after
-  // the plan loads. A window with no entry here just shows the
+  final DirectionsService _directionsService = DirectionsService();
+  // Real live-traffic road-following lines, keyed by window index — filled
+  // in after the plan loads. A window with no entry here just shows the
   // straight-line fallback instead (drawn by MapsService.buildPolylines).
   Map<int, Polyline> _roadPolylines = {};
 
@@ -98,10 +98,10 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     }
   }
 
-  /// Draws the actual road-following path for each batch, on top of the
-  /// straight-line fallback already showing. Runs after the plan itself
-  /// is on screen — the route doesn't need to wait on this, it's a
-  /// visual refinement that fills in as each window resolves.
+  /// Draws the actual live-traffic road-following path for each batch, on
+  /// top of the straight-line fallback already showing. Runs after the
+  /// plan itself is on screen — the route doesn't need to wait on this,
+  /// it's a visual refinement that fills in as each window resolves.
   Future<void> _loadRoadPolylines(RoutePlan plan, Location vendorStart) async {
     Location current = vendorStart;
     var windowIndex = 0;
@@ -119,20 +119,21 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       final capturedIndex = windowIndex;
 
       try {
-        final road = await _osrmService.getRoute(stops);
+        final road = await _directionsService.getRoute(stops);
         if (!mounted) return;
         setState(() {
           _roadPolylines = {
             ..._roadPolylines,
             capturedIndex: Polyline(
+              polylineId: PolylineId('window_$capturedIndex'),
               points: road.points,
               color: MapsService.colorForWindow(capturedIndex),
-              strokeWidth: 4,
+              width: 4,
             ),
           };
         });
       } catch (_) {
-        // OSRM failed for this one window — leave it out of
+        // Google's API failed for this one window — leave it out of
         // _roadPolylines, so the straight-line fallback keeps showing
         // for just that window instead of breaking the whole map.
       }
@@ -203,36 +204,32 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
           final vendorLocation = locationProvider.currentLocation;
 
+          // Straight-line fallback for any window Google hasn't resolved
+          // yet, plus the real road polylines already fetched — combined
+          // into one Set, since GoogleMap wants a Set<Polyline>, not the
+          // List flutter_map used.
+          final polylines = <Polyline>{
+            ...MapsService.buildPolylines(
+              plan,
+              vendorLocation,
+              skipWindows: _roadPolylines.keys.toSet(),
+            ),
+            ..._roadPolylines.values,
+          };
+
           return ListView(
             children: [
               _AdvisoryPanel(plan: plan),
               SizedBox(
                 height: 260,
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: MapsService.toLatLng(vendorLocation),
-                    initialZoom: 15.5,
+                child: GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: MapsService.toLatLng(vendorLocation),
+                    zoom: 15.5,
                   ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.quickdeliveries',
-                    ),
-                    PolylineLayer(
-                      polylines: [
-                        ...MapsService.buildPolylines(
-                          plan,
-                          vendorLocation,
-                          skipWindows: _roadPolylines.keys.toSet(),
-                        ),
-                        ..._roadPolylines.values,
-                      ],
-                    ),
-                    MarkerLayer(
-                      markers: MapsService.buildMarkers(plan, vendorLocation),
-                    ),
-                  ],
+                  polylines: polylines,
+                  markers: MapsService.buildMarkers(plan, vendorLocation),
+                  trafficEnabled: true,
                 ),
               ),
               _EtaTimeline(plan: plan),
@@ -263,7 +260,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       plan.stopsWithRealRoadData == plan.totalStops
-                          ? '✓ All distances from real road routes (OSRM)'
+                          ? '✓ All distances from real, live-traffic road routes (Google)'
                           : '${plan.stopsWithRealRoadData} of ${plan.totalStops} stops using real road '
                                 'routes — the rest are straight-line estimates',
                       style: TextStyle(
@@ -539,9 +536,7 @@ class _StopTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // A real aerial snapshot of the exact delivery spot — the
-            // closest thing to "what does this place actually look
-            // like" that's achievable for free (no billing, no key).
+            // A real satellite snapshot of the exact delivery spot.
             LocationPreview(location: stop.order.deliveryLocation, size: 64),
             const SizedBox(width: 10),
             Expanded(

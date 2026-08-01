@@ -47,18 +47,21 @@ class DrinksSelectionScreen extends StatelessWidget {
   }
 
   void _openCart(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const CartScreen()));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CartScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final orientation = MediaQuery.of(context).orientation;
-    final crossAxisCount = orientation == Orientation.landscape ? 3 : 2;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
-        title: const Text('Drinks', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Drinks',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.orange,
         elevation: 0,
         actions: [
@@ -118,8 +121,15 @@ class DrinksSelectionScreen extends StatelessWidget {
           return GridView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: docs.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount, // 👈 2 in portrait, 3 in landscape
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              // Picks as many columns as actually fit at ~180px
+              // each, instead of a fixed count that only reacts
+              // to portrait vs. landscape — this genuinely fills
+              // a wide desktop window with more columns, rather
+              // than stretching 2-3 cards across the whole
+              // screen. Same pattern already used successfully
+              // in menu_screen.dart's category grid.
+              maxCrossAxisExtent: 180,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
               childAspectRatio: 0.68,
@@ -179,11 +189,17 @@ class _DrinkCard extends StatelessWidget {
                 errorBuilder: (context, error, stackTrace) => Container(
                   color: Colors.grey[300],
                   alignment: Alignment.center,
-                  child: const Icon(Icons.local_drink, size: 40, color: Colors.blueGrey),
+                  child: const Icon(
+                    Icons.local_drink,
+                    size: 40,
+                    color: Colors.blueGrey,
+                  ),
                 ),
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
-                  return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                  return const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
                 },
               ),
             ),
@@ -200,7 +216,10 @@ class _DrinkCard extends StatelessWidget {
                     food.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -208,7 +227,10 @@ class _DrinkCard extends StatelessWidget {
                 // space, and 2 decimals where the rest of the app uses 0.
                 Text(
                   'UGX ${food.price.toStringAsFixed(0)}',
-                  style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
 
@@ -219,11 +241,17 @@ class _DrinkCard extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
                     child: const Text(
                       'ORDER NOW',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -241,11 +269,17 @@ class _DrinkCard extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.orange),
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
                     child: const Text(
                       'ADD TO CART',
-                      style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),

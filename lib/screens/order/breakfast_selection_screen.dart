@@ -58,13 +58,13 @@ class BreakfastSelectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final orientation = MediaQuery.of(context).orientation;
-    final crossAxisCount = orientation == Orientation.landscape ? 3 : 2;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
-        title: const Text('Breakfast', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Breakfast',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.orange,
         elevation: 0,
         actions: [
@@ -135,11 +135,19 @@ class BreakfastSelectionScreen extends StatelessWidget {
           return GridView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: docs.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount, // 👈 2 in portrait, 3 in landscape
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              // Picks as many columns as actually fit at ~180px
+              // each, instead of a fixed count that only reacts
+              // to portrait vs. landscape — this genuinely fills
+              // a wide desktop window with more columns, rather
+              // than stretching 2-3 cards across the whole
+              // screen. Same pattern already used successfully
+              // in menu_screen.dart's category grid.
+              maxCrossAxisExtent: 180,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio: 0.68, // taller cards so there's room for buttons
+              childAspectRatio:
+                  0.68, // taller cards so there's room for buttons
             ),
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
@@ -199,7 +207,11 @@ class _BreakfastCard extends StatelessWidget {
                 errorBuilder: (context, error, stackTrace) => Container(
                   color: Colors.grey[300],
                   alignment: Alignment.center,
-                  child: const Icon(Icons.free_breakfast, size: 40, color: Colors.brown),
+                  child: const Icon(
+                    Icons.free_breakfast,
+                    size: 40,
+                    color: Colors.brown,
+                  ),
                 ),
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;

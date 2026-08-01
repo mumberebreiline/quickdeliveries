@@ -46,4 +46,7 @@ app.*.map.json
  # enviroment
  .env
  
+ # KEY enviroment
+  android/local.properties
+  ios/Runner/Config.xcconfig
 
