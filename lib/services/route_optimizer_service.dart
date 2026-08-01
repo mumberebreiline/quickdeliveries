@@ -413,8 +413,9 @@ class RouteOptimizerService {
     int totalStops,
   ) {
     if (weather.isStorming) return 20;
-    if (atRiskCount == totalStops && totalStops > 0 && weather.isRaining)
+    if (atRiskCount == totalStops && totalStops > 0 && weather.isRaining) {
       return 15;
+    }
     return 0;
   }
 

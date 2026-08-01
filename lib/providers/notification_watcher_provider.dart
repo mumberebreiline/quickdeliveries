@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../models/app_user_profile.dart';
 import '../models/order_model.dart';
+import '../services/email_service.dart';
 import '../services/local_notification_service.dart';
 import '../services/order_service.dart';
+import '../services/user_service.dart';
 
 /// Watches Firestore order streams and fires a local notification the
 /// moment something relevant changes — a new order for the vendor, a
@@ -21,6 +24,8 @@ import '../services/order_service.dart';
 ///    to his own uid — same safety reasoning as the customer one.
 class NotificationWatcherProvider extends ChangeNotifier {
   final LocalNotificationService _notifications;
+  final UserService _userService;
+  final EmailService _emailService;
   StreamSubscription<List<FoodOrder>>? _vendorSub;
   StreamSubscription<List<FoodOrder>>? _customerSub;
   StreamSubscription<List<FoodOrder>>? _deliveryGuySub;
@@ -28,9 +33,15 @@ class NotificationWatcherProvider extends ChangeNotifier {
   Set<String>? _lastSeenActiveOrderIds;
   Map<String, String>? _lastSeenStatusByOrderId;
   Set<String>? _lastSeenAssignedOrderIds;
+  AppUserProfile? _vendorProfile;
 
-  NotificationWatcherProvider({LocalNotificationService? notifications})
-    : _notifications = notifications ?? LocalNotificationService() {
+  NotificationWatcherProvider({
+    LocalNotificationService? notifications,
+    UserService? userService,
+    EmailService? emailService,
+  }) : _notifications = notifications ?? LocalNotificationService(),
+       _userService = userService ?? UserService(),
+       _emailService = emailService ?? EmailService() {
     _notifications.initialize();
   }
 
@@ -41,6 +52,12 @@ class NotificationWatcherProvider extends ChangeNotifier {
   void startVendorWatcher() {
     if (_vendorSub != null) return; // already running
     _lastSeenActiveOrderIds = null;
+
+    // Fetched once per watcher start, not on every single order — her
+    // email address doesn't change between orders, no need to look it
+    // up again and again.
+    _userService.getVendorProfile().then((profile) => _vendorProfile = profile);
+
     _vendorSub = OrderService.streamActiveOrdersForVendor().listen(
       (orders) {
         final currentIds = orders.map((o) => o.id).toSet();
@@ -58,6 +75,19 @@ class NotificationWatcherProvider extends ChangeNotifier {
               body:
                   '$name just placed an order — ${order.deliveryLocation.name}',
             );
+
+            // Same "genuinely new" detection as the notification above
+            // — this just also sends an email, reaching her even if
+            // the app isn't open at that moment.
+            final vendor = _vendorProfile;
+            if (vendor?.email != null && vendor!.email!.isNotEmpty) {
+              _emailService.sendVendorNewOrderEmail(
+                toEmail: vendor.email!,
+                toName: vendor.name ?? 'there',
+                customerName: name,
+                destinationName: order.deliveryLocation.name,
+              );
+            }
           }
         }
         _lastSeenActiveOrderIds = currentIds;
@@ -107,6 +137,7 @@ class NotificationWatcherProvider extends ChangeNotifier {
     _vendorSub?.cancel();
     _vendorSub = null;
     _lastSeenActiveOrderIds = null;
+    _vendorProfile = null;
   }
 
   void stopCustomerWatcher() {

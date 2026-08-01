@@ -16,6 +16,7 @@ class UserService {
     required UserRole role,
     String? name,
     String? phone,
+    String? email,
   }) {
     return _ref
         .doc(uid)
@@ -25,6 +26,7 @@ class UserService {
             role: role,
             name: name,
             phone: phone,
+            email: email,
             createdAt: DateTime.now(),
           ).toMap(),
           SetOptions(merge: true),
@@ -35,6 +37,18 @@ class UserService {
     final doc = await _ref.doc(uid).get();
     if (!doc.exists || doc.data() == null) return null;
     return AppUserProfile.fromMap(doc.data()!, uid);
+  }
+
+  /// Auto-captures the login email onto a profile, without touching
+  /// name/phone/role/anything else. Deliberately a separate, narrow
+  /// method rather than reusing createProfile() for this — that one
+  /// writes every field it's given, including explicit nulls for
+  /// anything not passed in, which would have silently wiped out an
+  /// existing name/phone the moment this ran on an already-set-up
+  /// account. This only ever sends the one field it actually means to
+  /// change.
+  Future<void> updateMyEmail(String uid, String email) {
+    return _ref.doc(uid).set({'email': email}, SetOptions(merge: true));
   }
 
   /// Every account tagged as a delivery guy — this is the list the
@@ -50,6 +64,24 @@ class UserService {
               .map((doc) => AppUserProfile.fromMap(doc.data(), doc.id))
               .toList(),
         );
+  }
+
+  /// There's only one vendor account in this whole system (tagged
+  /// either 'admin' or the legacy 'vendor' value) — this is what lets
+  /// the customer's order screen offer a "contact us" option without
+  /// needing to know her uid ahead of time.
+  Future<AppUserProfile?> getVendorProfile() async {
+    for (final roleName in [UserRole.admin.name, UserRole.vendor.name]) {
+      final snapshot = await _ref
+          .where('role', isEqualTo: roleName)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        return AppUserProfile.fromMap(doc.data(), doc.id);
+      }
+    }
+    return null;
   }
 
   /// Called from the delivery tracking screen as he moves — this is

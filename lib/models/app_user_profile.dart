@@ -21,6 +21,7 @@ class AppUserProfile {
   final UserRole role;
   final String? name;
   final String? phone;
+  final String? email;
   final DateTime createdAt;
 
   /// Only meaningfully set for delivery guys while they're actively out
@@ -38,6 +39,7 @@ class AppUserProfile {
     required this.createdAt,
     this.name,
     this.phone,
+    this.email,
     this.currentLatitude,
     this.currentLongitude,
     this.locationUpdatedAt,
@@ -52,6 +54,7 @@ class AppUserProfile {
       ),
       name: map['name'] as String?,
       phone: map['phone'] as String?,
+      email: map['email'] as String?,
       createdAt:
           DateTime.tryParse(map['createdAt'] as String? ?? '') ??
           DateTime.now(),
@@ -68,6 +71,7 @@ class AppUserProfile {
       'role': role.name,
       'name': name,
       'phone': phone,
+      'email': email,
       'createdAt': createdAt.toIso8601String(),
     };
   }

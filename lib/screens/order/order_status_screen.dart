@@ -1,24 +1,62 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../models/app_user_profile.dart';
 import '../../models/order_model.dart';
+import '../../services/user_service.dart';
 
 // Lets a customer watch their own order move through
-// pending -> confirmed -> preparing -> outForDelivery -> delivered,
+// pending -> assigned -> outForDelivery -> delivered,
 // live, via a Firestore stream on that one order document. Different
 // from order_screen.dart's OrdersScreen, which lists every past order —
 // this is a single-order tracking view, e.g. opened right after
 // checkout or tapped from that list.
-class OrderStatusScreen extends StatelessWidget {
+class OrderStatusScreen extends StatefulWidget {
   final String orderId;
 
   const OrderStatusScreen({super.key, required this.orderId});
 
+  @override
+  State<OrderStatusScreen> createState() => _OrderStatusScreenState();
+}
+
+class _OrderStatusScreenState extends State<OrderStatusScreen> {
   static const _steps = [
     OrderStatus.pending,
     OrderStatus.assigned,
     OrderStatus.outForDelivery,
     OrderStatus.delivered,
   ];
+
+  final _userService = UserService();
+  AppUserProfile? _vendorProfile;
+  AppUserProfile? _deliveryGuyProfile;
+  String? _lastFetchedDeliveryGuyUid;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fetched once — there's only one vendor account in the system, so
+    // this never needs to change while this screen is open.
+    _userService.getVendorProfile().then((profile) {
+      if (mounted) setState(() => _vendorProfile = profile);
+    });
+  }
+
+  /// The delivery guy assigned to this order can change over time (it's
+  /// null until the admin assigns someone), so this re-fetches only when
+  /// that actually changes, rather than on every single Firestore tick.
+  void _maybeUpdateDeliveryGuyProfile(String? assignedTo) {
+    if (assignedTo == _lastFetchedDeliveryGuyUid) return;
+    _lastFetchedDeliveryGuyUid = assignedTo;
+    if (assignedTo == null) {
+      setState(() => _deliveryGuyProfile = null);
+      return;
+    }
+    _userService.getProfile(assignedTo).then((profile) {
+      if (mounted) setState(() => _deliveryGuyProfile = profile);
+    });
+  }
 
   String _stepLabel(String status) {
     switch (status) {
@@ -37,6 +75,36 @@ class OrderStatusScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _call(BuildContext context, String? phone) async {
+    if (phone == null || phone.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: phone);
+    final launched = await launchUrl(uri);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open the phone dialer for $phone')),
+      );
+    }
+  }
+
+  Future<void> _text(
+    BuildContext context,
+    String? phone,
+    String message,
+  ) async {
+    if (phone == null || phone.isEmpty) return;
+    final uri = Uri(
+      scheme: 'sms',
+      path: phone,
+      queryParameters: {'body': message},
+    );
+    final launched = await launchUrl(uri);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open messages for $phone')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,7 +115,7 @@ class OrderStatusScreen extends StatelessWidget {
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('orders')
-            .doc(orderId)
+            .doc(widget.orderId)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -64,6 +132,13 @@ class OrderStatusScreen extends StatelessWidget {
             snapshot.data!.data()!,
           );
           final currentIndex = _steps.indexOf(order.status);
+
+          // Scheduled after the frame, not called directly during
+          // build — this can trigger a setState, which build() itself
+          // shouldn't do synchronously.
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _maybeUpdateDeliveryGuyProfile(order.assignedTo),
+          );
 
           return ListView(
             padding: const EdgeInsets.all(20),
@@ -136,9 +211,93 @@ class OrderStatusScreen extends StatelessWidget {
                 'Total: UGX ${order.total.toStringAsFixed(0)}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
+
+              // Contact section — a real gap before this: the customer
+              // had no way to reach anyone at all if something went
+              // wrong with an order. Shows the delivery guy once one's
+              // assigned (he's the one physically coming), and the
+              // vendor always, as a general fallback.
+              if (order.status != OrderStatus.cancelled) ...[
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 12),
+                const Text(
+                  'Need help with this order?',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                if (_deliveryGuyProfile != null)
+                  _ContactTile(
+                    label: 'Your delivery guy',
+                    name: _deliveryGuyProfile!.name ?? 'Delivery guy',
+                    onCall: () => _call(context, _deliveryGuyProfile!.phone),
+                    onText: () => _text(
+                      context,
+                      _deliveryGuyProfile!.phone,
+                      'Hi, this is regarding my Quick Deliveries order to '
+                      '${order.deliveryLocation.name}.',
+                    ),
+                  ),
+                if (_vendorProfile != null)
+                  _ContactTile(
+                    label: 'Quick Deliveries',
+                    name: _vendorProfile!.name ?? 'Vendor',
+                    onCall: () => _call(context, _vendorProfile!.phone),
+                    onText: () => _text(
+                      context,
+                      _vendorProfile!.phone,
+                      'Hi, this is regarding my Quick Deliveries order to '
+                      '${order.deliveryLocation.name}.',
+                    ),
+                  ),
+              ],
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _ContactTile extends StatelessWidget {
+  final String label;
+  final String name;
+  final VoidCallback onCall;
+  final VoidCallback onText;
+
+  const _ContactTile({
+    required this.label,
+    required this.name,
+    required this.onCall,
+    required this.onText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: const CircleAvatar(
+          backgroundColor: Colors.deepPurple,
+          child: Icon(Icons.person, color: Colors.white, size: 18),
+        ),
+        title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(label, style: const TextStyle(fontSize: 12)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              onPressed: onCall,
+              icon: const Icon(Icons.phone, color: Colors.green),
+              tooltip: 'Call',
+            ),
+            IconButton(
+              onPressed: onText,
+              icon: const Icon(Icons.sms_outlined, color: Colors.blue),
+              tooltip: 'Text',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -169,11 +328,7 @@ class _StepRow extends StatelessWidget {
               size: 20,
             ),
             if (!isLast)
-              Container(
-                width: 2,
-                height: 28,
-                color: color.withValues(alpha: 0.4),
-              ),
+              Container(width: 2, height: 28, color: color.withValues(alpha: 0.4)),
           ],
         ),
         const SizedBox(width: 12),

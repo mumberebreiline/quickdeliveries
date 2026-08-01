@@ -5,6 +5,7 @@ import '../../models/location.dart';
 import '../../models/order_model.dart';
 import '../../providers/order_provider.dart';
 import '../../services/order_service.dart';
+import '../../services/email_service.dart';
 import '../../services/user_service.dart';
 import '../../utils/constants.dart';
 import '../../widgets/order_card.dart';
@@ -27,6 +28,7 @@ class AssignOrdersScreen extends StatefulWidget {
 
 class _AssignOrdersScreenState extends State<AssignOrdersScreen> {
   final _userService = UserService();
+  final _emailService = EmailService();
 
   Map<DateTime, List<FoodOrder>> _groupByTimeWindow(List<FoodOrder> orders) {
     final map = <DateTime, List<FoodOrder>>{};
@@ -57,6 +59,21 @@ class _AssignOrdersScreenState extends State<AssignOrdersScreen> {
         deliveryGuyName: deliveryGuy.name ?? 'Delivery guy',
       );
     }
+
+    // Email is a fallback that reaches him even if the app isn't open —
+    // unlike the local push notification, which only fires if the app
+    // process is alive. Doesn't block the assignment itself either way;
+    // it already happened in Firestore above regardless of whether this
+    // succeeds.
+    if (deliveryGuy.email != null && deliveryGuy.email!.isNotEmpty) {
+      _emailService.sendDeliveryAssignmentEmail(
+        toEmail: deliveryGuy.email!,
+        toName: deliveryGuy.name ?? 'there',
+        destinationName: batch.first.deliveryLocation.name,
+        stopCount: batch.length,
+      );
+    }
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

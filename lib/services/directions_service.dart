@@ -45,9 +45,11 @@ class GoogleMatrix {
 
   GoogleMatrix({
     required this.points,
-    required this._durationsSeconds,
-    required this._distancesMeters,
-  }) : _indexByLocationId = {
+    required List<List<double>> durationsSeconds,
+    required List<List<double>> distancesMeters,
+  }) : _durationsSeconds = durationsSeconds,
+       _distancesMeters = distancesMeters,
+       _indexByLocationId = {
          for (var i = 0; i < points.length; i++) points[i].id: i,
        };
 
@@ -122,6 +124,15 @@ class DirectionsService {
     double totalDistanceM = 0;
     double totalDurationS = 0;
     final steps = <NavigationStep>[];
+    // route['overview_polyline'] is Google's own *simplified* version of
+    // the route — meant for a quick thumbnail preview, and it visibly
+    // smooths out real corners and turns, which is exactly what made
+    // this look like a straight line instead of following the actual
+    // road. Each individual step inside each leg carries its own
+    // detailed polyline that really does trace every turn; concatenating
+    // all of those together (in order) is what a real turn-by-turn map
+    // actually needs.
+    final detailedPoints = <LatLng>[];
     for (final leg in legs) {
       totalDistanceM += (leg['distance']['value'] as num);
       // duration_in_traffic is the LIVE number — falls back to plain
@@ -141,11 +152,18 @@ class DirectionsService {
             distanceMeters: (step['distance']['value'] as num).toDouble(),
           ),
         );
+
+        final stepPolyline = step['polyline']?['points'] as String?;
+        if (stepPolyline != null) {
+          detailedPoints.addAll(_decodePolyline(stepPolyline));
+        }
       }
     }
 
     return RoadRoute(
-      points: _decodePolyline(route['overview_polyline']['points'] as String),
+      points: detailedPoints.isNotEmpty
+          ? detailedPoints
+          : _decodePolyline(route['overview_polyline']['points'] as String),
       distanceKm: totalDistanceM / 1000.0,
       durationMinutes: totalDurationS / 60.0,
       steps: steps,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/location.dart';
 import '../../models/order_model.dart';
 import '../../services/directions_service.dart';
@@ -302,6 +303,32 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
   /// Cancels only the CURRENT stop — not the whole run. If there are
   /// more stops left, navigation continues to the next one exactly as
   /// if this one had been delivered, just without marking it complete.
+  /// Opens the phone's own Messages app, pre-filled — the free
+  /// alternative to real automated SMS (which would need a paid gateway
+  /// like Africa's Talking plus a server-side Cloud Function). He still
+  /// has to tap Send himself; this just saves him typing the message
+  /// and looking up the number while he's out delivering.
+  Future<void> _textCustomer(FoodOrder order) async {
+    if (order.customerPhone.isEmpty) return;
+    final message =
+        'Hi ${order.customerName.isEmpty ? "" : order.customerName}, '
+        'this is your delivery guy from Quick Deliveries — I\'m on my '
+        'way to ${order.deliveryLocation.name}.';
+    final uri = Uri(
+      scheme: 'sms',
+      path: order.customerPhone,
+      queryParameters: {'body': message},
+    );
+    final launched = await launchUrl(uri);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open messages for ${order.customerPhone}'),
+        ),
+      );
+    }
+  }
+
   Future<void> _confirmCancelCurrentStop() async {
     final order = _currentOrder;
     if (order == null) return;
@@ -560,7 +587,7 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
                               ),
                               margin: const EdgeInsets.only(bottom: 12),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                                color: Colors.white.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Row(
@@ -622,33 +649,61 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _isCancelling
-                                ? null
-                                : _confirmCancelCurrentStop,
-                            icon: _isCancelling
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.close, color: Colors.white),
-                            label: Text(
-                              _isCancelling
-                                  ? 'Cancelling...'
-                                  : 'Cancel this stop',
-                              style: const TextStyle(color: Colors.white),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: order.customerPhone.isEmpty
+                                    ? null
+                                    : () => _textCustomer(order),
+                                icon: const Icon(
+                                  Icons.sms_outlined,
+                                  color: Colors.white,
+                                ),
+                                label: const Text(
+                                  'Text customer',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Colors.white70),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
                             ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.white70),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _isCancelling
+                                    ? null
+                                    : _confirmCancelCurrentStop,
+                                icon: _isCancelling
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                      ),
+                                label: Text(
+                                  _isCancelling ? 'Cancelling...' : 'Cancel',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Colors.white70),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
