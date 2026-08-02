@@ -25,6 +25,33 @@ class OrderCard extends StatelessWidget {
     }
   }
 
+  /// Opens the phone's own Messages app with a pre-filled text — this is
+  /// the free alternative to real SMS sending (which would need a paid
+  /// gateway like Africa's Talking plus a Cloud Functions backend).
+  /// Nothing is sent automatically; whoever taps this still has to hit
+  /// Send themselves, but it saves them typing out the message and
+  /// looking up the number.
+  Future<void> _textCustomer(BuildContext context) async {
+    if (order.customerPhone.isEmpty) return;
+    final message =
+        'Hi ${order.customerName.isEmpty ? "" : order.customerName}, '
+        'this is Quick Deliveries regarding your order to '
+        '${order.deliveryLocation.name}.';
+    final uri = Uri(
+      scheme: 'sms',
+      path: order.customerPhone,
+      queryParameters: {'body': message},
+    );
+    final launched = await launchUrl(uri);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open messages for ${order.customerPhone}'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -52,53 +79,77 @@ class OrderCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            InkWell(
-              onTap: order.customerPhone.isEmpty
-                  ? null
-                  : () => _callCustomer(context),
-              borderRadius: BorderRadius.circular(6),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.phone,
-                    size: 14,
-                    color: order.customerPhone.isEmpty
-                        ? Colors.grey
-                        : Colors.green,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    order.customerPhone.isEmpty
-                        ? 'No phone number given'
-                        : order.customerPhone,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: order.customerPhone.isEmpty
-                          ? Colors.grey
-                          : Colors.green.shade700,
-                      decoration: order.customerPhone.isEmpty
-                          ? null
-                          : TextDecoration.underline,
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: order.customerPhone.isEmpty
+                        ? null
+                        : () => _callCustomer(context),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.phone,
+                          size: 14,
+                          color: order.customerPhone.isEmpty
+                              ? Colors.grey
+                              : Colors.green,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            order.customerPhone.isEmpty
+                                ? 'No phone number given'
+                                : order.customerPhone,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: order.customerPhone.isEmpty
+                                  ? Colors.grey
+                                  : Colors.green.shade700,
+                              decoration: order.customerPhone.isEmpty
+                                  ? null
+                                  : TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  if (order.customerPhone.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    Icon(Icons.call, size: 12, color: Colors.green.shade700),
-                  ],
-                ],
-              ),
+                ),
+                if (order.customerPhone.isNotEmpty)
+                  IconButton(
+                    onPressed: () => _textCustomer(context),
+                    icon: Icon(
+                      Icons.sms_outlined,
+                      size: 18,
+                      color: Colors.blue.shade700,
+                    ),
+                    tooltip: 'Text customer',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 6),
             Row(
               children: [
                 const Icon(Icons.location_on, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
-                Text(
-                  order.deliveryLocation.name,
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                Expanded(
+                  child: Text(
+                    order.deliveryLocation.name,
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 const Icon(Icons.access_time, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(

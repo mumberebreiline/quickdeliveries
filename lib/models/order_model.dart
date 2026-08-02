@@ -39,17 +39,30 @@ class OrderItem {
 /// Order status values, as plain strings (matching how this project
 /// already writes 'pending' in OrderService) rather than an enum, so
 /// nothing that already reads order.status as a String needs to change.
+///
+/// Simplified lifecycle, per the lecturer's requirement: a placed order
+/// is treated as already confirmed — there's no separate manual
+/// "confirm" or "start preparing" step anymore. The real steps now are
+/// about who's handling it: unassigned, assigned to a delivery guy, out
+/// for delivery, delivered.
 class OrderStatus {
+  /// Just placed, nobody assigned to it yet — this is what the admin's
+  /// grouping screen shows.
   static const pending = 'pending';
-  static const confirmed = 'confirmed';
-  static const preparing = 'preparing';
+
+  /// The admin has assigned this to a specific delivery guy, but he
+  /// hasn't tapped "Start" yet.
+  static const assigned = 'assigned';
+
+  /// The delivery guy tapped Start and is on his way.
   static const outForDelivery = 'outForDelivery';
+
   static const delivered = 'delivered';
   static const cancelled = 'cancelled';
 
-  /// Statuses that mean "the vendor still needs to act on this" — this is
-  /// the feed the route optimizer consumes.
-  static const active = [pending, confirmed, preparing, outForDelivery];
+  /// Statuses that mean "this still needs to be delivered" — the feed
+  /// the route optimizer and the admin's grouping screen both consume.
+  static const active = [pending, assigned, outForDelivery];
 }
 
 // One whole order document from Firestore, including all its items.
@@ -61,6 +74,10 @@ class OrderStatus {
 // predate this (if any) will fall back to the vendor's own base location
 // and "right now" — clearly wrong for routing, but keeps old data from
 // crashing the parser; new orders should always supply real values.
+//
+// assignedTo/assignedToName are new too — which delivery guy (if any)
+// this order has been handed to, and his name so screens don't need a
+// separate lookup just to display who's carrying it.
 class FoodOrder {
   final String id;
   final String userId;
@@ -72,6 +89,8 @@ class FoodOrder {
   final String status;
   final Location deliveryLocation;
   final DateTime preferredTime;
+  final String? assignedTo;
+  final String? assignedToName;
 
   FoodOrder({
     required this.id,
@@ -84,6 +103,8 @@ class FoodOrder {
     this.customerName = '',
     this.customerPhone = '',
     this.status = OrderStatus.pending,
+    this.assignedTo,
+    this.assignedToName,
   });
 
   factory FoodOrder.fromFirestore(String id, Map<String, dynamic> data) {
@@ -112,6 +133,8 @@ class FoodOrder {
       preferredTime:
           _parseDate(data['preferredTime']) ??
           DateTime.now().add(const Duration(minutes: 30)),
+      assignedTo: data['assignedTo'] as String?,
+      assignedToName: data['assignedToName'] as String?,
     );
   }
 
@@ -139,6 +162,8 @@ class FoodOrder {
       'createdAt': FieldValue.serverTimestamp(),
       'deliveryLocation': deliveryLocation.toMap(),
       'preferredTime': Timestamp.fromDate(preferredTime),
+      'assignedTo': assignedTo,
+      'assignedToName': assignedToName,
     };
   }
 }

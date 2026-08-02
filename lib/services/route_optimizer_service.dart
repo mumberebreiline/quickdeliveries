@@ -111,6 +111,36 @@ class RouteOptimizerService {
        _trafficService = trafficService ?? TrafficService(),
        _directionsService = directionsService ?? DirectionsService();
 
+  /// Puts a delivery guy's own assigned stops in the most time-efficient
+  /// order to visit them, starting from wherever he currently is. Unlike
+  /// buildDeliveryPlan (which groups a whole day's pending orders by time
+  /// window for the admin to assign), this just answers one question:
+  /// "given these specific stops and my current position, what's the
+  /// fastest order to hit them in, accounting for real traffic right
+  /// now?" That's deliberately not always the geographically shortest
+  /// path — the 2-opt search below minimizes total travel *time*
+  /// (real, traffic-aware minutes from Google), which is what actually
+  /// matters for getting food delivered quickly, not raw distance.
+  Future<List<FoodOrder>> sequenceStopsForDeliveryGuy(
+    List<FoodOrder> stops, {
+    required Location startLocation,
+  }) async {
+    if (stops.length <= 1) return stops;
+
+    final locations = [startLocation, ...stops.map((o) => o.deliveryLocation)];
+    final matrix = await _directionsService.getDistanceMatrix(locations);
+
+    double costMinutes(Location from, Location to) {
+      final real = matrix?.durationMinutes(from, to);
+      if (real != null) return real;
+      return (from.distanceToKm(to) / AppConfig.assumedSpeedKmh) * 60;
+    }
+
+    var sequenced = _nearestNeighbourRoute(stops, startLocation, costMinutes);
+    sequenced = _twoOptImprove(sequenced, startLocation, costMinutes);
+    return sequenced;
+  }
+
   Future<RoutePlan> buildDeliveryPlan(
     List<FoodOrder> pendingOrders, {
     Location vendorStart = CampusLocations.vendorBase,
@@ -271,40 +301,14 @@ class RouteOptimizerService {
     required bool isNightNow,
     required int largestWindowSize,
   }) {
+    // Personal-safety advisories (storm/rain/night) moved to the
+    // delivery guy's own tracking screen — see
+    // RouteOptimizerService.personalSafetyAdvisories below. He's the one
+    // actually out walking these routes now, not the admin, so these
+    // are the messages that matter to him, not her. What's left here is
+    // purely about batch logistics — decisions only she can act on
+    // (how to group/split orders), not things a delivery guy does.
     final advisories = <AdvisoryMessage>[];
-
-    if (weather.isStorming) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.critical,
-          message:
-              'Thunderstorm right now. If it\'s not safe to walk, consider '
-              'holding this batch 15-20 minutes and messaging customers — a '
-              'short delay beats risking a fall or ruined food in a storm.',
-        ),
-      );
-    } else if (weather.isRaining) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.warning,
-          message:
-              'It\'s raining. Cover the food before heading out, and the '
-              'ETAs below already assume you\'ll be moving slower than usual.',
-        ),
-      );
-    }
-
-    if (isNightNow) {
-      advisories.add(
-        const AdvisoryMessage(
-          severity: AdvisorySeverity.warning,
-          message:
-              'It\'s after dark. Stick to well-lit paths between '
-              'buildings, and consider going with someone else if you\'re '
-              'carrying cash.',
-        ),
-      );
-    }
 
     if (largestWindowSize > 5) {
       advisories.add(
@@ -350,14 +354,68 @@ class RouteOptimizerService {
     return advisories;
   }
 
+  /// Storm/rain/night personal-safety advisories — pulled out as a
+  /// public, reusable method so the delivery guy's tracking screen can
+  /// generate the exact same messages without duplicating the wording,
+  /// since he's the one these are actually written for.
+  static List<AdvisoryMessage> personalSafetyAdvisories({
+    required WeatherCondition weather,
+    required bool isNightNow,
+  }) {
+    final advisories = <AdvisoryMessage>[];
+
+    if (weather.isStorming) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.critical,
+          message:
+              'Thunderstorm right now. If it\'s not safe to walk, consider '
+              'holding off 15-20 minutes and letting the customer know — a '
+              'short delay beats risking a fall or ruined food in a storm.',
+        ),
+      );
+    } else if (weather.isRaining) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.warning,
+          message:
+              'It\'s raining. Cover the food before heading out, and your '
+              'ETA already assumes you\'ll be moving slower than usual.',
+        ),
+      );
+    }
+
+    if (isNightNow) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.warning,
+          message:
+              'It\'s after dark. Stick to well-lit paths, and consider '
+              'going with someone else if you\'re carrying cash.',
+        ),
+      );
+    }
+
+    if (advisories.isEmpty) {
+      advisories.add(
+        const AdvisoryMessage(
+          severity: AdvisorySeverity.info,
+          message: 'Conditions look clear for this delivery.',
+        ),
+      );
+    }
+    return advisories;
+  }
+
   int _suggestedDelayMinutes(
     WeatherCondition weather,
     int atRiskCount,
     int totalStops,
   ) {
     if (weather.isStorming) return 20;
-    if (atRiskCount == totalStops && totalStops > 0 && weather.isRaining)
+    if (atRiskCount == totalStops && totalStops > 0 && weather.isRaining) {
       return 15;
+    }
     return 0;
   }
 

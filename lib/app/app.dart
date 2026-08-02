@@ -25,10 +25,11 @@ class App extends StatelessWidget {
 
 /// Decides which notification watchers should be running, based on the
 /// signed-in account's actual role — never guessed from which screen
-/// someone's on. The vendor watcher only ever starts for role: vendor,
-/// so a customer's phone can never end up buzzing about a stranger's
-/// order. The customer watcher (their own orders only) is safe to run
-/// for anyone who's signed in, vendor included.
+/// someone's on. The vendor/admin watcher only ever starts for that
+/// role, so a customer's phone can never end up buzzing about a
+/// stranger's order — same reasoning for the delivery guy watcher,
+/// scoped to his own uid. The customer watcher (their own orders only)
+/// is safe to run for anyone who's signed in, admin included.
 class _NotificationGate extends StatefulWidget {
   final Widget child;
   const _NotificationGate({required this.child});
@@ -48,10 +49,16 @@ class _NotificationGateState extends State<_NotificationGate> {
     if (auth.role != _lastRole) {
       _lastRole = auth.role;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (auth.role == UserRole.vendor) {
+        if (auth.role != null && auth.role!.isAdmin) {
           watcher.startVendorWatcher();
         } else {
           watcher.stopVendorWatcher();
+        }
+
+        if (auth.role == UserRole.deliveryGuy && auth.user != null) {
+          watcher.startDeliveryGuyWatcher(auth.user!.uid);
+        } else {
+          watcher.stopDeliveryGuyWatcher();
         }
       });
     }

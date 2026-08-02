@@ -1,12 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="quickdeliveries"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
+        <!-- Google Maps SDK for Android reads its key from HERE — this is
+             a completely separate mechanism from the web version's
+             index.html script tag. ${MAPS_API_KEY} is a manifest
+             placeholder, filled in at build time by
+             android/app/build.gradle.kts from your local.properties file.
+             Without this exact meta-data tag, the native Android Maps
+             SDK has no key at all, regardless of anything set up for web. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}"/>

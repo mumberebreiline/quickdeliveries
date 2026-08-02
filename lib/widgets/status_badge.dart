@@ -9,10 +9,8 @@ class StatusBadge extends StatelessWidget {
     switch (status) {
       case OrderStatus.pending:
         return Colors.grey;
-      case OrderStatus.confirmed:
+      case OrderStatus.assigned:
         return Colors.blue;
-      case OrderStatus.preparing:
-        return Colors.orange;
       case OrderStatus.outForDelivery:
         return Colors.deepPurple;
       case OrderStatus.delivered:
@@ -27,11 +25,9 @@ class StatusBadge extends StatelessWidget {
   String get _label {
     switch (status) {
       case OrderStatus.pending:
-        return 'Pending';
-      case OrderStatus.confirmed:
-        return 'Confirmed';
-      case OrderStatus.preparing:
-        return 'Preparing';
+        return 'Pending assignment';
+      case OrderStatus.assigned:
+        return 'Assigned';
       case OrderStatus.outForDelivery:
         return 'Out for delivery';
       case OrderStatus.delivered:
@@ -48,9 +44,9 @@ class StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.12),
+        color: _color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _color.withOpacity(0.4)),
+        border: Border.all(color: _color.withValues(alpha: 0.4)),
       ),
       child: Text(
         _label,
