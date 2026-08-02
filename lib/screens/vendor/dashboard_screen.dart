@@ -154,7 +154,7 @@ class VendorDashboardScreen extends StatelessWidget {
               icon: Icons.assignment_ind,
               label: 'Assign Orders',
               subtitle: 'Grouped by time hand batches to delivery guys',
-              onTap: () => Navigator.push(
+              onTap: () => Navigator.push( 
                 context,
                 MaterialPageRoute(builder: (_) => const AssignOrdersScreen()),
               ),
@@ -205,7 +205,7 @@ class _DashboardTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Colors.deepPurple.withOpacity(0.15),
+          backgroundColor: Colors.deepPurple.withValues(alpha: 0.15),
           child: Icon(icon, color: Colors.deepPurple),
         ),
         title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
