@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'food_item.dart';
 import '../../services/cart_service.dart';
 import 'cart_screen.dart';
+import '../../widgets/fly_to_cart.dart';
 
 // The STANDARD order screen — used by every category EXCEPT Main
 // Courses (Breakfast, Drinks, Popular, Vegetarian all import this).
@@ -26,6 +27,11 @@ class OrderDetailScreen extends StatefulWidget {
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
   int _quantity = 1;
   late final TextEditingController _quantityController;
+
+  // Needed for the fly-to-cart animation: one to know where the cart
+  // icon actually is on screen, one to know where the tapped button was.
+  final GlobalKey _cartIconKey = GlobalKey();
+  final GlobalKey _addToCartButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -62,10 +68,23 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   void _addToCart() {
     CartService.instance.addItem(widget.food, _quantity);
+
+    // The animation needs a moment on screen before this closes -
+    // popping immediately (the old behavior) would cut it off before
+    // it's even visible.
+    FlyToCart.animate(
+      context: context,
+      cartKey: _cartIconKey,
+      startPosition: FlyToCart.startFromWidget(_addToCartButtonKey),
+    );
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$_quantity x ${widget.food.name} added to cart')),
     );
-    Navigator.pop(context);
+
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) Navigator.pop(context);
+    });
   }
 
   // MAKE ORDER — adds this item to the cart, then takes the customer
@@ -102,6 +121,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             builder: (context, _) {
               final count = CartService.instance.itemCount;
               return IconButton(
+                key: _cartIconKey,
                 onPressed: () => _openCart(context),
                 icon: Badge(
                   label: Text('$count'),
@@ -205,7 +225,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   Widget _buildNameAndPrice({bool alignLeft = false}) {
     return Column(
-      crossAxisAlignment: alignLeft ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: alignLeft
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       children: [
         Text(
           widget.food.name,
@@ -269,15 +291,22 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       children: [
         Expanded(
           child: OutlinedButton(
+            key: _addToCartButtonKey,
             onPressed: _addToCart,
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.orange),
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
             ),
             child: const Text(
               'ADD TO CART',
-              style: TextStyle(fontSize: 14, color: Colors.orange, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),
@@ -288,11 +317,17 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
             ),
             child: const Text(
               'MAKE ORDER',
-              style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),
