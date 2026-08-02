@@ -96,6 +96,38 @@ class OrderService {
         );
   }
 
+  /// Orders nobody's been assigned to yet — what the admin's grouping
+  /// screen shows, ready to hand off to a delivery guy.
+  static Stream<List<FoodOrder>> streamPendingOrders() {
+    return _ordersCollection
+        .where('status', isEqualTo: OrderStatus.pending)
+        .orderBy('preferredTime')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => FoodOrder.fromFirestore(doc.id, doc.data()))
+              .toList(),
+        );
+  }
+
+  /// Orders currently assigned to one specific delivery guy — assigned
+  /// but not yet delivered. This is his whole home screen.
+  static Stream<List<FoodOrder>> streamAssignedOrders(String deliveryGuyUid) {
+    return _ordersCollection
+        .where('assignedTo', isEqualTo: deliveryGuyUid)
+        .where(
+          'status',
+          whereIn: [OrderStatus.assigned, OrderStatus.outForDelivery],
+        )
+        .orderBy('preferredTime')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => FoodOrder.fromFirestore(doc.id, doc.data()))
+              .toList(),
+        );
+  }
+
   static Stream<List<FoodOrder>> streamDeliveredOrders() {
     return _ordersCollection
         .where('status', isEqualTo: OrderStatus.delivered)
@@ -110,5 +142,30 @@ class OrderService {
 
   static Future<void> updateStatus(String orderId, String status) {
     return _ordersCollection.doc(orderId).update({'status': status});
+  }
+
+  /// Either the admin or the assigned delivery guy can cancel an order —
+  /// this just sets the status; both streamPendingOrders and
+  /// streamAssignedOrders already filter on status, so a cancelled
+  /// order disappears from both of their screens on its own, no extra
+  /// cleanup needed.
+  static Future<void> cancelOrder(String orderId) {
+    return updateStatus(orderId, OrderStatus.cancelled);
+  }
+
+  /// The admin hands an order (or a whole batch of them) to a specific
+  /// delivery guy — this is what replaces the old manual "confirm/start
+  /// preparing" steps. The order is treated as already confirmed the
+  /// moment it's assigned.
+  static Future<void> assignOrder({
+    required String orderId,
+    required String deliveryGuyUid,
+    required String deliveryGuyName,
+  }) {
+    return _ordersCollection.doc(orderId).update({
+      'assignedTo': deliveryGuyUid,
+      'assignedToName': deliveryGuyName,
+      'status': OrderStatus.assigned,
+    });
   }
 }

@@ -13,8 +13,9 @@ class Validators {
   }
 
   static String? phone(String? value) {
-    if (value == null || value.trim().isEmpty)
+    if (value == null || value.trim().isEmpty) {
       return 'Phone number is required';
+    }
     final cleaned = value.trim().replaceAll(' ', '');
     final regex = RegExp(r'^(?:\+?256|0)7\d{8}$');
     if (!regex.hasMatch(cleaned)) {
