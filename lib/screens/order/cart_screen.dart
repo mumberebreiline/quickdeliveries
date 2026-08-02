@@ -5,7 +5,6 @@ import '../../services/cart_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/location_service.dart';
 import '../../models/location.dart';
-import '../../utils/constants.dart';
 import '../../utils/time_picker_helper.dart';
 import '../../widgets/location_status.dart';
 
@@ -327,7 +326,7 @@ class _CartScreenState extends State<CartScreen> {
                     color: Colors.white,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.08),
                         blurRadius: 6,
                         offset: const Offset(0, -2),
                       ),

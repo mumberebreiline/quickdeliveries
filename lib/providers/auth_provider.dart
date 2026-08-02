@@ -48,12 +48,32 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _refreshRole(String uid) async {
     final profile = await _userService.getProfile(uid);
+    // Anonymous guests have no email at all (isAnonymous == true) — this
+    // is only ever a real address for someone who actually logged in
+    // with email/password, which is exactly who this should apply to.
+    final loginEmail = _authService.currentUser?.email;
+
     if (profile != null) {
       _role = profile.role;
+      // The one genuine improvement here: instead of requiring someone
+      // to manually retype the same email into Firestore after it was
+      // already typed once into Firebase Console's Authentication tab
+      // (or the app's own registration form), this fills it in
+      // automatically the first time they ever sign in — no separate
+      // manual step needed for notifications to reach the right inbox.
+      if ((profile.email == null || profile.email!.isEmpty) &&
+          loginEmail != null &&
+          loginEmail.isNotEmpty) {
+        await _userService.updateMyEmail(uid, loginEmail);
+      }
     } else {
       // No Firestore profile yet — default to customer and create one,
       // rather than leave the app unsure which experience to show.
-      await _userService.createProfile(uid: uid, role: UserRole.customer);
+      await _userService.createProfile(
+        uid: uid,
+        role: UserRole.customer,
+        email: loginEmail,
+      );
       _role = UserRole.customer;
     }
   }
