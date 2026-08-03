@@ -698,7 +698,7 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
                               ),
                               margin: const EdgeInsets.only(bottom: 12),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                                color: Colors.white.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Row(

@@ -52,10 +52,9 @@ class GoogleMatrix {
 
   GoogleMatrix({
     required this.points,
-    required List<List<double>> durationsSeconds,
+    required this._durationsSeconds,
     required List<List<double>> distancesMeters,
-  }) : _durationsSeconds = durationsSeconds,
-       _distancesMeters = distancesMeters,
+  }) : _distancesMeters = distancesMeters,
        _indexByLocationId = {
          for (var i = 0; i < points.length; i++) points[i].id: i,
        };
