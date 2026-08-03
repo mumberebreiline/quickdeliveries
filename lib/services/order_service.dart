@@ -110,6 +110,25 @@ class OrderService {
         );
   }
 
+  /// Every order currently assigned or out for delivery, across ALL
+  /// delivery guys at once — this is what lets the admin's Assign
+  /// Orders screen show "already out on a delivery" / "N assigned,
+  /// not started yet" next to each name in the dropdown, instead of
+  /// offering someone who's busy as if he were free.
+  static Stream<List<FoodOrder>> streamOrdersInProgress() {
+    return _ordersCollection
+        .where(
+          'status',
+          whereIn: [OrderStatus.assigned, OrderStatus.outForDelivery],
+        )
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => FoodOrder.fromFirestore(doc.id, doc.data()))
+              .toList(),
+        );
+  }
+
   /// Orders currently assigned to one specific delivery guy — assigned
   /// but not yet delivered. This is his whole home screen.
   static Stream<List<FoodOrder>> streamAssignedOrders(String deliveryGuyUid) {

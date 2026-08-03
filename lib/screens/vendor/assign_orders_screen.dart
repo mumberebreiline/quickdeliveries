@@ -49,9 +49,9 @@ class _AssignOrdersScreenState extends State<AssignOrdersScreen> {
   }
 
   Future<void> _assignBatch(
-      List<FoodOrder> batch,
-      AppUserProfile deliveryGuy,
-      ) async {
+    List<FoodOrder> batch,
+    AppUserProfile deliveryGuy,
+  ) async {
     for (final order in batch) {
       await OrderService.assignOrder(
         orderId: order.id,
@@ -99,90 +99,110 @@ class _AssignOrdersScreenState extends State<AssignOrdersScreen> {
           final deliveryGuys = deliveryGuysSnapshot.data ?? [];
 
           return StreamBuilder<List<FoodOrder>>(
-            stream: OrderService.streamPendingOrders(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          color: Colors.red,
-                          size: 40,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          "Orders couldn't load",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${snapshot.error}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'If this mentions an "index", open the link Firestore '
+            stream: OrderService.streamOrdersInProgress(),
+            builder: (context, inProgressSnapshot) {
+              // Grouped by who it's assigned to, so each batch card can
+              // look up "is this guy currently busy" in one map lookup
+              // instead of scanning the whole list per dropdown item.
+              final inProgressByGuy = <String, List<FoodOrder>>{};
+              for (final order in inProgressSnapshot.data ?? <FoodOrder>[]) {
+                if (order.assignedTo == null) continue;
+                inProgressByGuy
+                    .putIfAbsent(order.assignedTo!, () => [])
+                    .add(order);
+              }
+
+              return StreamBuilder<List<FoodOrder>>(
+                stream: OrderService.streamPendingOrders(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.red,
+                              size: 40,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              "Orders couldn't load",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${snapshot.error}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'If this mentions an "index", open the link Firestore '
                               'printed in the debug console and click Create — it '
                               'takes a minute to build, then this works permanently.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-              if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
+                      ),
+                    );
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-              final orders = snapshot.data!;
-              if (orders.isEmpty) {
-                return const Center(
-                  child: Text('No unassigned orders right now'),
-                );
-              }
+                  final orders = snapshot.data!;
+                  if (orders.isEmpty) {
+                    return const Center(
+                      child: Text('No unassigned orders right now'),
+                    );
+                  }
 
-              if (deliveryGuys.isEmpty) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'There are unassigned orders, but no delivery guy accounts '
+                  if (deliveryGuys.isEmpty) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(
+                          'There are unassigned orders, but no delivery guy accounts '
                           'exist yet. Add one in Firebase Console → Authentication, '
                           'then tag their users/{uid} document with role: "deliveryGuy" '
                           'in Firestore.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              }
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
 
-              final grouped = _groupByTimeWindow(orders);
-              final windowStarts = grouped.keys.toList()..sort();
+                  final grouped = _groupByTimeWindow(orders);
+                  final windowStarts = grouped.keys.toList()..sort();
 
-              return ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: windowStarts.length,
-                itemBuilder: (context, index) {
-                  final windowStart = windowStarts[index];
-                  final batch = grouped[windowStart]!;
-                  return _BatchCard(
-                    windowStart: windowStart,
-                    orders: batch,
-                    deliveryGuys: deliveryGuys,
-                    onAssign: (guy) => _assignBatch(batch, guy),
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: windowStarts.length,
+                    itemBuilder: (context, index) {
+                      final windowStart = windowStarts[index];
+                      final batch = grouped[windowStart]!;
+                      return _BatchCard(
+                        windowStart: windowStart,
+                        orders: batch,
+                        deliveryGuys: deliveryGuys,
+                        inProgressByGuy: inProgressByGuy,
+                        onAssign: (guy) => _assignBatch(batch, guy),
+                      );
+                    },
                   );
                 },
               );
@@ -198,12 +218,14 @@ class _BatchCard extends StatefulWidget {
   final DateTime windowStart;
   final List<FoodOrder> orders;
   final List<AppUserProfile> deliveryGuys;
+  final Map<String, List<FoodOrder>> inProgressByGuy;
   final void Function(AppUserProfile) onAssign;
 
   const _BatchCard({
     required this.windowStart,
     required this.orders,
     required this.deliveryGuys,
+    required this.inProgressByGuy,
     required this.onAssign,
   });
 
@@ -221,7 +243,7 @@ class _BatchCardState extends State<_BatchCard> {
         title: const Text('Cancel this order?'),
         content: Text(
           'This cancels the order to ${order.deliveryLocation.name}'
-              '${order.customerName.isEmpty ? '' : ' for ${order.customerName}'}.',
+          '${order.customerName.isEmpty ? '' : ' for ${order.customerName}'}.',
         ),
         actions: [
           TextButton(
@@ -241,15 +263,15 @@ class _BatchCardState extends State<_BatchCard> {
     try {
       await OrderService.cancelOrder(order.id);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Order cancelled')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Order cancelled')));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not cancel: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not cancel: $e')));
       }
     }
   }
@@ -271,7 +293,7 @@ class _BatchCardState extends State<_BatchCard> {
     );
     final total = widget.orders.fold<double>(
       0.0,
-          (sum, order) => sum + guyLocation.distanceToKm(order.deliveryLocation),
+      (sum, order) => sum + guyLocation.distanceToKm(order.deliveryLocation),
     );
     return total / widget.orders.length;
   }
@@ -322,7 +344,10 @@ class _BatchCardState extends State<_BatchCard> {
                 actions: TextButton.icon(
                   onPressed: () => _confirmCancel(context, order),
                   icon: const Icon(Icons.close, color: Colors.red, size: 18),
-                  label: const Text('Cancel order', style: TextStyle(color: Colors.red)),
+                  label: const Text(
+                    'Cancel order',
+                    style: TextStyle(color: Colors.red),
+                  ),
                 ),
               ),
             const SizedBox(height: 8),
@@ -331,14 +356,6 @@ class _BatchCardState extends State<_BatchCard> {
                 Expanded(
                   child: DropdownButtonFormField<AppUserProfile>(
                     initialValue: _selected,
-                    // This is the actual fix: without isExpanded, the
-                    // dropdown sizes itself to the selected text's
-                    // natural width instead of the space actually
-                    // available, so it overflows regardless of the
-                    // ellipsis already set on the text below —
-                    // ellipsis can't truncate anything until the
-                    // parent is told what width it's allowed to use.
-                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Assign to',
                       helperText: 'Nearest first',
@@ -346,21 +363,44 @@ class _BatchCardState extends State<_BatchCard> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: sortedGuys
-                        .map(
-                          (guy) {
-                        final distanceKm = _distanceKmFor(guy);
-                        final label = distanceKm == null
-                            ? '${guy.name ?? guy.uid} — location unknown'
-                            : '${guy.name ?? guy.uid} — '
-                            '${distanceKm.toStringAsFixed(distanceKm < 1 ? 2 : 1)} km away';
-                        return DropdownMenuItem(
-                          value: guy,
-                          child: Text(label, overflow: TextOverflow.ellipsis),
-                        );
-                      },
-                    )
-                        .toList(),
+                    items: sortedGuys.map((guy) {
+                      final distanceKm = _distanceKmFor(guy);
+                      final distancePart = distanceKm == null
+                          ? 'location unknown'
+                          : '${distanceKm.toStringAsFixed(distanceKm < 1 ? 2 : 1)} km away';
+
+                      // What this guy's currently doing, if anything -
+                      // this is what stops the admin from handing more
+                      // work to someone who's already physically out on
+                      // a delivery right now, while still allowing more
+                      // to be added to someone who's merely assigned
+                      // but hasn't started yet.
+                      final inProgress = widget.inProgressByGuy[guy.uid] ?? [];
+                      final isOutForDelivery = inProgress.any(
+                        (o) => o.status == OrderStatus.outForDelivery,
+                      );
+                      final assignedNotStarted = inProgress
+                          .where((o) => o.status == OrderStatus.assigned)
+                          .length;
+
+                      final statusPart = isOutForDelivery
+                          ? ' — out for delivery'
+                          : assignedNotStarted > 0
+                          ? ' — $assignedNotStarted assigned, not started'
+                          : '';
+
+                      return DropdownMenuItem(
+                        value: guy,
+                        enabled: !isOutForDelivery,
+                        child: Text(
+                          '${guy.name ?? guy.uid} — $distancePart$statusPart',
+                          overflow: TextOverflow.ellipsis,
+                          style: isOutForDelivery
+                              ? const TextStyle(color: Colors.grey)
+                              : null,
+                        ),
+                      );
+                    }).toList(),
                     onChanged: (guy) => setState(() => _selected = guy),
                   ),
                 ),
