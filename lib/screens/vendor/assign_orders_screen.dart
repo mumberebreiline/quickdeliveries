@@ -356,6 +356,12 @@ class _BatchCardState extends State<_BatchCard> {
                 Expanded(
                   child: DropdownButtonFormField<AppUserProfile>(
                     initialValue: _selected,
+                    isExpanded: true,
+                    // null lets each item size itself instead of being
+                    // forced into the default single-line 48px height -
+                    // needed now that each item shows two short lines
+                    // instead of one long one.
+                    itemHeight: null,
                     decoration: const InputDecoration(
                       labelText: 'Assign to',
                       helperText: 'Nearest first',
@@ -392,12 +398,29 @@ class _BatchCardState extends State<_BatchCard> {
                       return DropdownMenuItem(
                         value: guy,
                         enabled: !isOutForDelivery,
-                        child: Text(
-                          '${guy.name ?? guy.uid} — $distancePart$statusPart',
-                          overflow: TextOverflow.ellipsis,
-                          style: isOutForDelivery
-                              ? const TextStyle(color: Colors.grey)
-                              : null,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              guy.name ?? guy.uid,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: isOutForDelivery ? Colors.grey : null,
+                              ),
+                            ),
+                            Text(
+                              '$distancePart$statusPart',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isOutForDelivery
+                                    ? Colors.grey
+                                    : Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     }).toList(),
